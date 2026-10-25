@@ -1,6 +1,17 @@
 import os
 
-from core import db, alive, base_fields, hash_password, verify_password, log_event
+from core import db, alive, base_fields, now_iso, hash_password, verify_password, log_event
+
+PROVIDER_FIELDS = ("partita_iva", "pec", "nome_portale", "url_portale", "referente_nome", "referente_email", "referente_telefono")
+SERVICES = [
+    ("AFC_COMPLETO", "AFC completo", "SERVIZIO_PROVIDER", True, 1),
+    ("SOLO_CASH_FLOW", "Solo cash flow", "SERVIZIO_NURSERY", False, 2),
+    ("FATTURAZIONE_PER_CONTO", "Fatturazione per conto", "SERVIZIO_NURSERY", False, 3),
+    ("PAGHE", "Paghe", "SERVIZIO_PROVIDER", True, 4),
+]
+PLACEHOLDER = ("TESTO PROVVISORIO — {titolo} della Piattaforma Nursery.\n\n"
+               "Questo è un testo segnaposto senza valore legale. Deve essere sostituito con il testo definitivo "
+               "approvato da Nursery, pubblicando una nuova versione dalla schermata Documenti legali.")
 
 
 async def ensure_indexes():
@@ -14,6 +25,43 @@ async def ensure_indexes():
     await db.invitations.create_index("token_hash")
     await db.event_logs.create_index([("startup_id", 1), ("timestamp", -1)])
     await db.login_attempts.create_index("identifier")
+    await db.services.create_index("codice", unique=True)
+    await db.startup_services.create_index("startup_id")
+    await db.legal_acceptances.create_index("user_id")
+    await db.alert_handlings.create_index("event_log_id", unique=True, partialFilterExpression={"deleted_at": {"$type": "null"}})
+    for coll in ("services", "service_incompatibilities", "startup_services", "legal_documents", "legal_acceptances", "alert_handlings"):
+        await db[coll].create_index("id", unique=True)
+
+
+async def migrate():
+    if not await db.services.count_documents({}):
+        ids = {}
+        for codice, nome, cat, req, ordine in SERVICES:
+            s = await insert("services", {**base_fields(None), "codice": codice, "nome": nome, "descrizione": "", "categoria": cat,
+                                          "richiede_provider": req, "attivo": True, "ordine": ordine})
+            ids[codice] = s["id"]
+        a, b = sorted([ids["SOLO_CASH_FLOW"], ids["AFC_COMPLETO"]])
+        await insert("service_incompatibilities", {**base_fields(None), "service_a_id": a, "service_b_id": b})
+    codes = {s["codice"]: s async for s in db.services.find({}, {"_id": 0})}
+    async for st in db.startups.find({"servizi_attivi": {"$exists": True}}, {"_id": 0}):
+        for c in st["servizi_attivi"]:
+            s = codes[c]
+            rec = await insert("startup_services", {**base_fields(None), "startup_id": st["id"], "service_id": s["id"],
+                                                    "data_attivazione": st["created_at"][:10], "data_cessazione": None})
+            await log_event(None, "STARTUP_SERVICE", rec["id"], "STARTUP_SERVICE_ADDED",
+                            {"servizio": s["nome"], "data_attivazione": rec["data_attivazione"], "data_cessazione": None, "origine": "migrazione"},
+                            "NURSERY_ONLY", st["id"])
+        await db.startups.update_one({"id": st["id"]}, {"$unset": {"servizi_attivi": ""}})
+    await db.startups.update_many({"link_impresa_digitale": {"$exists": True}}, {"$rename": {"link_impresa_digitale": "link_portale_provider"}})
+    async for o in db.organizations.find({"type": "PROVIDER", "nome_portale": {"$exists": False}}, {"_id": 0}):
+        fields = {k: None for k in PROVIDER_FIELDS}
+        if o["name"] == "Ida Servizi S.r.l.":
+            fields.update(nome_portale="Impresa Digitale", url_portale="https://impresadigitale.eu/")
+        await db.organizations.update_one({"id": o["id"]}, {"$set": fields})
+    if not await db.legal_documents.count_documents({}):
+        for tipo, titolo in (("TERMINI_USO", "Termini d'uso"), ("INFORMATIVA_PRIVACY", "Informativa privacy")):
+            await insert("legal_documents", {**base_fields(None), "tipo": tipo, "versione": "1.0", "testo": PLACEHOLDER.format(titolo=titolo),
+                                             "data_pubblicazione": now_iso(), "attivo": True})
 
 
 async def insert(coll, doc):
@@ -29,6 +77,7 @@ async def seed():
         admin = await db.users.find_one({"email": admin_email})
         if admin and not verify_password(admin_pw, admin.get("password_hash")):
             await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_pw)}})
+        await migrate()
         return
 
     demo_pw = hash_password(os.environ["DEMO_PASSWORD"])
@@ -72,3 +121,4 @@ async def seed():
         await insert("users", user(org, "Admin", code.capitalize(), f"admin@{slug}.test", "ADMIN_STARTUP", demo_pw))
         if code == "ALFA":
             await insert("users", user(org, "Paolo", "Operativo", "operativo@alfa.test", "OPERATIVO_STARTUP", demo_pw))
+    await migrate()

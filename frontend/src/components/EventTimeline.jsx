@@ -1,5 +1,5 @@
 import { Lock } from "lucide-react";
-import { ACTION_LABELS, FIELD_LABELS, ROLE_LABELS, displayValue, formatDateTime } from "@/lib/labels";
+import { ACTION_LABELS, ALERT_AZIONI, FIELD_LABELS, ROLE_LABELS, displayValue, formatDate, formatDateTime } from "@/lib/labels";
 import { Empty } from "@/components/common";
 
 function Details({ e }) {
@@ -7,6 +7,7 @@ function Details({ e }) {
   if (d.changes) {
     return (
       <ul className="mt-2 space-y-1 text-xs text-ink-soft">
+        {d.servizio && <li className="font-medium text-ink">{d.servizio}</li>}
         {Object.entries(d.changes).map(([f, c]) => (
           <li key={f}>
             <span className="font-medium text-ink">{FIELD_LABELS[f] || f}</span>: {displayValue(f, c.from)} → {displayValue(f, c.to)}
@@ -16,6 +17,11 @@ function Details({ e }) {
     );
   }
   const parts = [];
+  if (d.servizio) parts.push(d.servizio);
+  if (d.data_attivazione) parts.push(`dal ${formatDate(d.data_attivazione)}`);
+  if (d.data_cessazione) parts.push(`al ${formatDate(d.data_cessazione)}`);
+  if (d.documenti) parts.push(d.documenti.join(", "));
+  if (d.azione) parts.push(ALERT_AZIONI[d.azione] || d.azione);
   if (d.email) parts.push(d.email);
   if (d.role) parts.push(ROLE_LABELS[d.role]);
   if (d.from && d.to) parts.push(`${ROLE_LABELS[d.from]} → ${ROLE_LABELS[d.to]}`);

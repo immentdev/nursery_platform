@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from core import (
-    TZ, db, alive, now_iso, bad_request, get_current_user, hash_password,
+    TZ, db, alive, now_iso, bad_request, get_current_user, get_user_any, pending_legal, hash_password,
     verify_password, validate_password_strength, hash_token, create_access_token, log_event, is_startup_user,
 )
 from routes_users import event_meta, check_personal
@@ -41,21 +41,52 @@ async def me_payload(user):
     startup = None
     if is_startup_user(user):
         startup = await db.startups.find_one(alive({"organization_id": user["organization_id"]}), {"_id": 0})
-    return {**user, "organization": org, "startup_id": startup["id"] if startup else None}
+    return {**user, "organization": org, "startup_id": startup["id"] if startup else None,
+            "pending_legal": await pending_legal(user)}
 
 
-async def valid_invitation(token):
+TOKEN_MSG = {
+    "INVITO": ("Link di invito non valido o annullato", "Questo invito è già stato utilizzato",
+               "Il link di invito è scaduto: chiedi un nuovo invito", "INVITATO"),
+    "RESET_PASSWORD": ("Link di reimpostazione non valido o annullato", "Questo link di reimpostazione è già stato utilizzato",
+                       "Il link di reimpostazione è scaduto: chiedine uno nuovo", "ATTIVO"),
+}
+
+
+async def valid_invitation(token, tipo="INVITO"):
+    invalid, used, expired, status = TOKEN_MSG[tipo]
     inv = await db.invitations.find_one({"token_hash": hash_token(token), "deleted_at": None}, {"_id": 0})
-    if not inv or inv["revoked_at"]:
-        raise HTTPException(status_code=404, detail="Link di invito non valido o annullato")
+    if not inv or inv["revoked_at"] or (inv.get("tipo") or "INVITO") != tipo:
+        raise HTTPException(status_code=404, detail=invalid)
     if inv["used_at"]:
-        raise HTTPException(status_code=410, detail="Questo invito è già stato utilizzato")
+        raise HTTPException(status_code=410, detail=used)
     if datetime.fromisoformat(inv["expires_at"]) < datetime.now(TZ):
-        raise HTTPException(status_code=410, detail="Il link di invito è scaduto: chiedi un nuovo invito")
-    user = await db.users.find_one(alive({"id": inv["user_id"], "status": "INVITATO"}), {"_id": 0, "password_hash": 0})
+        raise HTTPException(status_code=410, detail=expired)
+    user = await db.users.find_one(alive({"id": inv["user_id"], "status": status}), {"_id": 0, "password_hash": 0})
     if not user:
-        raise HTTPException(status_code=404, detail="Link di invito non valido o annullato")
+        raise HTTPException(status_code=404, detail=invalid)
     return inv, user
+
+
+@router.get("/reset/{token}")
+async def get_reset(token: str):
+    inv, user = await valid_invitation(token, "RESET_PASSWORD")
+    return {"email": user["email"], "nome": user["nome"], "cognome": user["cognome"], "expires_at": inv["expires_at"]}
+
+
+@router.post("/reset-password")
+async def reset_password(body: AcceptIn):
+    inv, user = await valid_invitation(body.token, "RESET_PASSWORD")
+    validate_password_strength(body.password)
+    t = now_iso()
+    await db.users.update_one({"id": user["id"]}, {"$set": {"password_hash": hash_password(body.password), "updated_at": t}})
+    await db.invitations.update_one({"id": inv["id"]}, {"$set": {"used_at": t, "updated_at": t}})
+    await db.login_attempts.delete_one({"identifier": user["email"]})
+    org = await db.organizations.find_one({"id": user["organization_id"]}, {"_id": 0})
+    meta = await event_meta(org)
+    meta["visibility"] = "ALL"
+    await log_event(user["id"], "USER", user["id"], "PASSWORD_RESET_COMPLETED", {"email": user["email"]}, **meta)
+    return {"token": create_access_token(user["id"]), "user": await me_payload(user)}
 
 
 @router.post("/login")
@@ -79,7 +110,7 @@ async def login(body: LoginIn):
 
 
 @router.get("/me")
-async def me(user=Depends(get_current_user)):
+async def me(user=Depends(get_user_any)):
     return await me_payload(user)
 
 

@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchSelect } from "@/components/Pickers";
 import { api, errorMessage } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { canManage } from "@/lib/perms";
@@ -63,14 +64,14 @@ export default function InviteUserDialog({ open, onOpenChange, fixedOrg, onInvit
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-1.5">
             <Label>Organizzazione</Label>
-            <Select value={orgId} onValueChange={(v) => { setOrgId(v); setForm({ ...form, role: "", competence_areas: [] }); }} disabled={!!fixedOrg}>
-              <SelectTrigger data-testid="invite-org-select"><SelectValue placeholder="Seleziona organizzazione" /></SelectTrigger>
-              <SelectContent>
-                {manageableOrgs.map((o) => (
-                  <SelectItem key={o.id} value={o.id}>{o.name} · {ORG_TYPE_LABELS[o.type]}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchSelect
+              value={orgId}
+              onChange={(v) => { setOrgId(v); setForm({ ...form, role: "", competence_areas: [] }); }}
+              disabled={!!fixedOrg}
+              placeholder="Seleziona organizzazione"
+              options={manageableOrgs.map((o) => ({ value: o.id, label: o.name, hint: ORG_TYPE_LABELS[o.type] }))}
+              testId="invite-org-select"
+            />
           </div>
           <div className="space-y-1.5">
             <Label>Ruolo</Label>

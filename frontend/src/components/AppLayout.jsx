@@ -1,11 +1,27 @@
-import { useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
-import { Building2, Users, Briefcase, Layers, UserCircle, LogOut, Menu, Bell, Home } from "lucide-react";
+import { useEffect, useState } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Building2, Users, Briefcase, Layers, UserCircle, LogOut, Menu, Bell, Home, Package, FileText } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
 import { isNursery, isProvider, isAdminNursery, canManageUsers } from "@/lib/perms";
 import { ROLE_LABELS } from "@/lib/labels";
+import { api } from "@/lib/api";
+
+export const ALERTS_EVENT = "nursery-alerts-changed";
+
+export function useAlertCount(enabled) {
+  const [n, setN] = useState(0);
+  const location = useLocation();
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const load = () => api.get("/alerts/count").then(({ data }) => setN(data.da_gestire)).catch(() => {});
+    load();
+    window.addEventListener(ALERTS_EVENT, load);
+    return () => window.removeEventListener(ALERTS_EVENT, load);
+  }, [enabled, location.pathname]);
+  return n;
+}
 
 function navItems(u) {
   const items = [];
@@ -15,7 +31,9 @@ function navItems(u) {
   if (isNursery(u)) items.push({ to: "/segnalazioni", label: "Segnalazioni", icon: Bell, id: "segnalazioni" });
   if (isAdminNursery(u)) {
     items.push({ to: "/provider", label: "Provider", icon: Briefcase, id: "provider" });
+    items.push({ to: "/servizi", label: "Servizi", icon: Package, id: "servizi" });
     items.push({ to: "/profili", label: "Profili di servizio", icon: Layers, id: "profili" });
+    items.push({ to: "/documenti-legali", label: "Documenti legali", icon: FileText, id: "documenti-legali" });
   }
   items.push({ to: "/profilo", label: "Area personale", icon: UserCircle, id: "profilo" });
   return items;
@@ -24,6 +42,7 @@ function navItems(u) {
 function SideNav({ onNavigate }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const alertCount = useAlertCount(isNursery(user));
   return (
     <div className="flex h-full flex-col">
       <div className="px-5 py-6">
@@ -44,7 +63,10 @@ function SideNav({ onNavigate }) {
             }
           >
             <Icon className="h-4 w-4" />
-            {label}
+            <span className="flex-1">{label}</span>
+            {id === "segnalazioni" && alertCount > 0 && (
+              <span className="rounded-full bg-danger-fg px-2 py-0.5 text-xs font-medium text-brand-fg" data-testid="nav-alerts-count">{alertCount}</span>
+            )}
           </NavLink>
         ))}
       </nav>

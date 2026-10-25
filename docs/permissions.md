@@ -17,6 +17,13 @@ Legenda: ✅ consentito · 👁 sola lettura · ❌ negato
 | Eliminare (logico) | ✅ solo se ONBOARDING | ❌ | ❌ | ❌ | ❌ |
 | Utenti collegati (`GET /{id}/users`) | ✅ | ✅ | 👁 se startup assegnata | 👁 propria | 👁 propria |
 | Cronologia (`GET /{id}/events`) | ✅ tutti gli eventi | ✅ tutti gli eventi | 👁 solo `visibility = ALL` | 👁 solo `ALL` | 👁 solo `ALL` |
+| Servizi della startup | ✅ tutti i periodi con date (storico) | ✅ storico | 👁 solo attivi e programmati | 👁 solo attivi e programmati | 👁 solo attivi e programmati |
+| Assegnare servizi e date | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Profilo di servizio della startup | ✅ | ✅ | ❌ rimosso anche dalle API | ❌ rimosso anche dalle API | ❌ rimosso anche dalle API |
+| Referente Nursery | nome | nome | nome, email, telefono | nome, email, telefono | nome, email, telefono |
+| Dati del provider assegnato | tutti | tutti | tutti (solo il proprio provider) | solo ragione sociale e nome portale | solo ragione sociale e nome portale |
+
+Il pulsante del portale compare solo se la startup ha un provider e `link_portale_provider` è valorizzato; l'etichetta è il `nome_portale` del provider.
 
 ## Utenti
 
@@ -28,6 +35,7 @@ Legenda: ✅ consentito · 👁 sola lettura · ❌ negato
 | Cambiare ruolo | ✅ | ✅ non Nursery | ❌ | ✅ propria startup (vedi regole) | ❌ |
 | Disattivare / annullare invito | ✅ | ✅ non Nursery | ❌ | ✅ propria startup (vedi regole) | ❌ |
 | Riattivare | ✅ | ✅ non Nursery | ❌ | ✅ propria startup | ❌ |
+| Generare link di reimpostazione password (utenti ATTIVI, 24 ore) | ✅ qualsiasi utente | ✅ utenti Provider e Startup | ❌ | ✅ utenti della propria startup | ❌ |
 | Rigenerare link di invito | ✅ | ✅ non Nursery | ❌ | ✅ propria startup | ❌ |
 | Modificare utenti Nursery o Provider | ✅ | Provider ✅ / Nursery ❌ | ❌ | ❌ | ❌ |
 
@@ -48,7 +56,21 @@ Regole aggiuntive:
 | Creare / modificare / eliminare provider | ✅ | ❌ | ❌ |
 | Elenco profili di servizio | ✅ | ✅ (lettura) | ❌ |
 | Creare / modificare / eliminare profili | ✅ | ❌ | ❌ |
-| Segnalazioni (`GET /api/alerts`) | ✅ | ✅ | ❌ |
+| Segnalazioni (`GET /api/alerts`, contatore, "Preso visione", azioni rapide) | ✅ | ✅ (azioni rapide entro i propri permessi utenti) | ❌ |
+| Catalogo servizi (`GET /api/services`) | ✅ | ✅ (lettura) | ❌ |
+| Creare / modificare / disattivare / eliminare servizi | ✅ | ❌ | ❌ |
+| Documenti legali: elenco, bozze, pubblicazione | ✅ | ❌ | ❌ |
+| Leggere e accettare i documenti in vigore | ✅ | ✅ | ✅ tutti |
+
+I dati provider (partita IVA, PEC, portale, referente) sono modificabili solo da ADMIN_NURSERY. Alla creazione sono obbligatori ragione sociale, partita IVA e PEC.
+
+## Termini d'uso e informativa privacy
+
+Finché un utente non ha accettato tutte le versioni in vigore, ogni API restituisce 403, tranne `/api/auth/me`, `/api/legal/current`, `/api/legal/accept`. Vale anche al primo accesso da invito e dopo la pubblicazione di una nuova versione.
+
+## Segnalazioni
+
+Ogni segnalazione indica l'azione attesa. "Preso visione" e le azioni rapide (Annulla invito, Cambia ruolo in OPERATIVO_STARTUP) registrano un `alert_handlings` con utente e data; l'azione rapida vale come presa visione. Il contatore conta le segnalazioni non ancora gestite da alcun utente Nursery.
 
 Eliminazione di provider e profili: logica, consentita solo se non collegati ad alcuna startup non cessata; altrimenti 409 con l'elenco delle startup collegate. Eliminando un provider i suoi utenti vengono disattivati (evento registrato).
 
@@ -63,10 +85,11 @@ Ogni evento ha `visibility`:
 - **NURSERY_ONLY**:
   - modifiche di `referente_nursery_user_id` (cambio referente Nursery);
   - modifiche di `service_profile_id` (cambio profilo di servizio);
-  - modifiche di `servizi_attivi`;
+  - assegnazione e modifica delle date dei servizi della startup (`startup_services`);
+  - eventi sul catalogo servizi e sulla gestione delle segnalazioni;
   - tutti gli eventi che riguardano utenti di Nursery;
   - eventi sui profili di servizio ed eliminazione di una startup.
-- **ALL**: tutti gli altri eventi.
+- **ALL**: tutti gli altri eventi, inclusi in modo esplicito la generazione di un link di reimpostazione password e la reimpostazione completata.
 
 Se una singola modifica tocca sia campi riservati sia campi ordinari, il backend registra due eventi distinti (uno `NURSERY_ONLY`, uno `ALL`), così nessun dato riservato è visibile a Provider e Startup.
 

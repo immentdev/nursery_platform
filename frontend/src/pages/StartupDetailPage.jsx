@@ -7,8 +7,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, errorMessage } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { isNursery, isAdminNursery, canManage } from "@/lib/perms";
-import { REGIMI_IVA, SERVIZI, formatChiusura, formatDate } from "@/lib/labels";
-import { Card, Field, PageHeader, StatusBadge, Chip, ConfirmDialog } from "@/components/common";
+import { REGIMI_IVA, formatChiusura, formatDate } from "@/lib/labels";
+import StartupServicesPanel from "@/components/StartupServicesPanel";
+import { Card, Field, PageHeader, StatusBadge, ConfirmDialog } from "@/components/common";
 import EventTimeline from "@/components/EventTimeline";
 import UsersList from "@/components/UsersList";
 import InviteUserDialog from "@/components/InviteUserDialog";
@@ -32,8 +33,8 @@ function Anagrafica({ s }) {
         </Field>
         <Field label="Chiusura esercizio" testId="field-chiusura">{formatChiusura(s.data_chiusura_esercizio)}</Field>
         <Field label="Regime IVA" testId="field-regime-iva">{REGIMI_IVA[s.regime_iva]}</Field>
-        <Field label="Impresa Digitale" testId="field-impresa-digitale">
-          {s.link_impresa_digitale ? <a href={s.link_impresa_digitale} target="_blank" rel="noreferrer" className="text-brand underline">{s.link_impresa_digitale}</a> : "—"}
+        <Field label="Portale provider" testId="field-portale-provider">
+          {s.link_portale_provider ? <a href={s.link_portale_provider} target="_blank" rel="noreferrer" className="text-brand underline">{s.link_portale_provider}</a> : "—"}
         </Field>
       </dl>
     </Card>
@@ -41,18 +42,7 @@ function Anagrafica({ s }) {
 }
 
 function Servizi({ s }) {
-  return (
-    <Card>
-      <dl className="grid gap-6 sm:grid-cols-2">
-        <Field label="Servizi attivi" testId="field-servizi">
-          <div className="flex flex-wrap gap-1">{s.servizi_attivi.map((x) => <Chip key={x} testId={`servizio-${x}`}>{SERVIZI[x]}</Chip>)}</div>
-        </Field>
-        <Field label="Profilo di servizio" testId="field-profilo">{s.service_profile_name}</Field>
-        <Field label="Provider" testId="field-provider">{s.provider_name || "Nessun provider (commercialista proprio)"}</Field>
-        <Field label="Referente Nursery" testId="field-referente">{s.referente_name}</Field>
-      </dl>
-    </Card>
-  );
+  return <StartupServicesPanel s={s} />;
 }
 
 export function StartupView({ id, home }) {
@@ -107,9 +97,9 @@ export function StartupView({ id, home }) {
         title={<span className="flex flex-wrap items-center gap-3">{s.denominazione}<StatusBadge value={s.stato_cliente} testId="startup-stato-badge" /></span>}
         subtitle={<span className="font-mono">{s.codice_breve} · P.IVA {s.partita_iva}</span>}
         actions={<>
-          {s.link_impresa_digitale && (
-            <Button variant="outline" asChild data-testid="impresa-digitale-button">
-              <a href={s.link_impresa_digitale} target="_blank" rel="noreferrer"><ExternalLink className="mr-2 h-4 w-4" />Impresa Digitale</a>
+          {s.provider && s.link_portale_provider && (
+            <Button variant="outline" asChild data-testid="portale-provider-button">
+              <a href={s.link_portale_provider} target="_blank" rel="noreferrer"><ExternalLink className="mr-2 h-4 w-4" />{s.provider.nome_portale || "Portale provider"}</a>
             </Button>
           )}
           {nursery && <Button asChild data-testid="edit-startup-button"><Link to={`/startup/${s.id}/modifica`}><Pencil className="mr-2 h-4 w-4" />Modifica</Link></Button>}

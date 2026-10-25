@@ -8,7 +8,8 @@ import { useAuth } from "@/context/AuthContext";
 import { formatDateTime } from "@/lib/labels";
 import { AuthShell } from "./LoginPage";
 
-export default function AcceptInvitePage() {
+export default function AcceptInvitePage({ mode }) {
+  const reset = mode === "reset";
   const { token } = useParams();
   const { startSession } = useAuth();
   const navigate = useNavigate();
@@ -19,8 +20,8 @@ export default function AcceptInvitePage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    api.get(`/auth/invitation/${token}`).then(({ data }) => setInfo(data)).catch((e) => setLoadError(errorMessage(e)));
-  }, [token]);
+    api.get(reset ? `/auth/reset/${token}` : `/auth/invitation/${token}`).then(({ data }) => setInfo(data)).catch((e) => setLoadError(errorMessage(e)));
+  }, [token, reset]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -29,7 +30,7 @@ export default function AcceptInvitePage() {
       return;
     }
     try {
-      const { data } = await api.post("/auth/accept-invite", { token, password: pw });
+      const { data } = await api.post(reset ? "/auth/reset-password" : "/auth/accept-invite", { token, password: pw });
       startSession(data);
       navigate("/");
     } catch (err) {
@@ -39,16 +40,19 @@ export default function AcceptInvitePage() {
 
   if (loadError) {
     return (
-      <AuthShell title="Invito non disponibile">
+      <AuthShell title={reset ? "Link non disponibile" : "Invito non disponibile"}>
         <p className="text-sm text-danger-fg" data-testid="invite-error">{loadError}</p>
         <Link to="/login" className="mt-4 inline-block text-sm text-brand underline" data-testid="invite-go-login">Vai al login</Link>
       </AuthShell>
     );
   }
-  if (!info) return <AuthShell title="Verifica invito…" />;
+  if (!info) return <AuthShell title="Verifica link…" />;
 
+  const subtitle = reset
+    ? `Imposta una nuova password per ${info.email}. Link valido fino al ${formatDateTime(info.expires_at)}.`
+    : `Imposta la password per ${info.email} (${info.organization_name}). Invito valido fino al ${formatDateTime(info.expires_at)}.`;
   return (
-    <AuthShell title={`Benvenuto, ${info.nome}`} subtitle={`Imposta la password per ${info.email} (${info.organization_name}). Invito valido fino al ${formatDateTime(info.expires_at)}.`}>
+    <AuthShell title={reset ? "Reimposta password" : `Benvenuto, ${info.nome}`} subtitle={subtitle}>
       <form onSubmit={submit} className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="pw">Nuova password</Label>

@@ -13,7 +13,10 @@ import UsersPage from "@/pages/UsersPage";
 import ProvidersPage from "@/pages/ProvidersPage";
 import ServiceProfilesPage from "@/pages/ServiceProfilesPage";
 import ProfilePage from "@/pages/ProfilePage";
-import AlertsPage from "@/pages/AlertsPage";
+import AlertsCenter from "@/pages/AlertsCenter";
+import ServicesPage from "@/pages/ServicesPage";
+import LegalDocumentsPage from "@/pages/LegalDocumentsPage";
+import LegalGate from "@/components/LegalGate";
 import MyStartupPage from "@/pages/MyStartupPage";
 
 function Guard({ allow, children }) {
@@ -21,6 +24,7 @@ function Guard({ allow, children }) {
   if (user === null) return <div className="p-10 text-sm text-ink-muted" data-testid="auth-loading">Caricamento…</div>;
   if (!user) return <Navigate to="/login" replace />;
   if (allow && !allow(user)) return <Navigate to="/" replace />;
+  if (user.pending_legal?.length) return <LegalGate />;
   return <AppLayout>{children}</AppLayout>;
 }
 
@@ -41,6 +45,7 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/invito/:token" element={<AcceptInvitePage />} />
+          <Route path="/reimposta/:token" element={<AcceptInvitePage mode="reset" />} />
           <Route path="/startup" element={<Guard allow={listAccess}><StartupsPage /></Guard>} />
           <Route path="/startup/nuova" element={<Guard allow={isNursery}><StartupFormPage /></Guard>} />
           <Route path="/startup/:id" element={<Guard><StartupDetailPage /></Guard>} />
@@ -49,7 +54,9 @@ export default function App() {
           <Route path="/utenti" element={<Guard allow={canManageUsers}><UsersPage /></Guard>} />
           <Route path="/provider" element={<Guard allow={isAdminNursery}><ProvidersPage /></Guard>} />
           <Route path="/profili" element={<Guard allow={isAdminNursery}><ServiceProfilesPage /></Guard>} />
-          <Route path="/segnalazioni" element={<Guard allow={isNursery}><AlertsPage /></Guard>} />
+          <Route path="/segnalazioni" element={<Guard allow={isNursery}><AlertsCenter /></Guard>} />
+          <Route path="/servizi" element={<Guard allow={isAdminNursery}><ServicesPage /></Guard>} />
+          <Route path="/documenti-legali" element={<Guard allow={isAdminNursery}><LegalDocumentsPage /></Guard>} />
           <Route path="/profilo" element={<Guard><ProfilePage /></Guard>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

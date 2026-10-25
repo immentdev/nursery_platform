@@ -28,6 +28,22 @@ export const SERVIZI = {
 
 export const REGIMI_IVA = { MENSILE: "Mensile", TRIMESTRALE: "Trimestrale" };
 
+export const CATEGORIE = { SERVIZIO_PROVIDER: "Servizio provider", SERVIZIO_NURSERY: "Servizio Nursery" };
+
+export const SERVICE_STATO = { ATTIVO: "Attivo", PROGRAMMATO: "Programmato", CESSATO: "Cessato" };
+
+export const LEGAL_TIPI = { TERMINI_USO: "Termini d'uso", INFORMATIVA_PRIVACY: "Informativa privacy" };
+
+export const ALERT_AZIONI = { PRESA_VISIONE: "Presa visione", INVITO_ANNULLATO: "Invito annullato", RUOLO_CAMBIATO: "Ruolo cambiato" };
+
+export const todayRome = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Rome" });
+
+export function serviceStatus(r, today = todayRome()) {
+  if (r.data_cessazione && r.data_cessazione < today) return "CESSATO";
+  if (r.data_attivazione > today) return "PROGRAMMATO";
+  return "ATTIVO";
+}
+
 export const COMPETENCE = { CONTABILITA: "Contabilità", PAGHE: "Paghe" };
 
 export const ACTION_LABELS = {
@@ -44,6 +60,12 @@ export const ACTION_LABELS = {
   INVITE_REGENERATED: "Link di invito rigenerato",
   INVITE_ACCEPTED: "Invito accettato",
   PASSWORD_CHANGED: "Password modificata",
+  STARTUP_SERVICE_ADDED: "Servizio assegnato",
+  STARTUP_SERVICE_UPDATED: "Date del servizio modificate",
+  PASSWORD_RESET_LINK_CREATED: "Link di reimpostazione password generato",
+  PASSWORD_RESET_COMPLETED: "Password reimpostata",
+  LEGAL_ACCEPTED: "Termini d'uso e informativa privacy accettati",
+  ALERT_HANDLED: "Segnalazione gestita",
 };
 
 export const FIELD_LABELS = {
@@ -64,6 +86,9 @@ export const FIELD_LABELS = {
   servizi_attivi: "Servizi attivi",
   referente_nursery_user_id: "Referente Nursery",
   link_impresa_digitale: "Link Impresa Digitale",
+  link_portale_provider: "Link portale provider",
+  data_attivazione: "Data attivazione",
+  data_cessazione: "Data cessazione",
   stato_cliente: "Stato cliente",
   nome: "Nome",
   cognome: "Cognome",

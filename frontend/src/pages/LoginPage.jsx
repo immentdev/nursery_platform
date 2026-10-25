@@ -31,6 +31,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [forgot, setForgot] = useState(false);
 
   if (user) return <Navigate to="/" replace />;
 
@@ -63,6 +64,14 @@ export default function LoginPage() {
         <Button type="submit" className="w-full" disabled={busy} data-testid="login-submit-button">
           {busy ? "Accesso in corso…" : "Accedi"}
         </Button>
+        <button type="button" className="text-sm text-brand underline" onClick={() => setForgot(!forgot)} data-testid="forgot-password-link">
+          Password dimenticata?
+        </button>
+        {forgot && (
+          <p className="rounded-md bg-brand-soft px-3 py-2 text-sm text-brand" data-testid="forgot-password-message">
+            Contatta il tuo referente Nursery o l'amministratore della tua startup per ricevere un link di reimpostazione.
+          </p>
+        )}
       </form>
     </AuthShell>
   );

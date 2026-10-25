@@ -1,4 +1,4 @@
-import { STATO_CLIENTE, USER_STATUS } from "@/lib/labels";
+import { SERVICE_STATO, STATO_CLIENTE, USER_STATUS } from "@/lib/labels";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -7,6 +7,7 @@ import {
 const TONES = {
   ATTIVO: "bg-ok-bg text-ok-fg",
   ONBOARDING: "bg-brand-soft text-brand",
+  PROGRAMMATO: "bg-brand-soft text-brand",
   INVITATO: "bg-warn-bg text-warn-fg",
   SOSPESO: "bg-warn-bg text-warn-fg",
   CESSATO: "bg-neutral-bg text-neutral-fg",
@@ -18,7 +19,7 @@ export const StatusBadge = ({ value, kind = "stato", testId }) => (
     data-testid={testId}
     className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${TONES[value] || "bg-neutral-bg text-neutral-fg"}`}
   >
-    {(kind === "user" ? USER_STATUS : STATO_CLIENTE)[value] || value}
+    {({ user: USER_STATUS, servizio: SERVICE_STATO }[kind] || STATO_CLIENTE)[value] || value}
   </span>
 );
 

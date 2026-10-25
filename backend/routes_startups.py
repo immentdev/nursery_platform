@@ -6,11 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from core import (
-    db, EMAIL_RE, NURSERY_ROLES, SERVIZI, STATI_CLIENTE, REGIMI_IVA,
+    db, EMAIL_RE, NURSERY_ROLES, STATI_CLIENTE, REGIMI_IVA, today_iso, check_date, is_provider,
     alive, base_fields, now_iso, bad_request, forbidden, not_found, get_current_user,
     is_nursery, require_nursery, require_admin_nursery, startup_scope, get_visible_startup,
     log_event, user_label, revoke_invitations,
 )
+from routes_services import ServizioIn, record_status, validate_service_records
 
 router = APIRouter(prefix="/api/startups")
 
@@ -30,9 +31,9 @@ class StartupIn(BaseModel):
     regime_iva: str = ""
     provider_organization_id: Optional[str] = None
     service_profile_id: str = ""
-    servizi_attivi: List[str] = []
+    servizi: List[ServizioIn] = []
     referente_nursery_user_id: str = ""
-    link_impresa_digitale: Optional[str] = None
+    link_portale_provider: Optional[str] = None
     stato_cliente: str = "ONBOARDING"
 
 
@@ -42,20 +43,14 @@ class ContattiIn(BaseModel):
     telefono: Optional[str] = None
 
 
-FIELDS = list(StartupIn.model_fields)
-SENSITIVE = {"referente_nursery_user_id", "service_profile_id", "servizi_attivi"}
+FIELDS = [f for f in StartupIn.model_fields if f != "servizi"]
+SENSITIVE = {"referente_nursery_user_id", "service_profile_id"}
+PROVIDER_FULL = ("id", "name", "partita_iva", "pec", "nome_portale", "url_portale", "referente_nome", "referente_email", "referente_telefono")
 REQUIRED = {
     "denominazione": "Denominazione", "codice_fiscale": "Codice fiscale", "partita_iva": "Partita IVA",
     "data_costituzione": "Data di costituzione", "regime_iva": "Regime IVA",
     "service_profile_id": "Profilo di servizio", "referente_nursery_user_id": "Referente Nursery",
 }
-
-
-def check_date(value, label):
-    try:
-        date.fromisoformat(value)
-    except (TypeError, ValueError):
-        bad_request(f"{label}: data non valida (formato AAAA-MM-GG)")
 
 
 def validate_contacts(d):
@@ -67,16 +62,43 @@ def validate_contacts(d):
         bad_request("Il numero di telefono non è valido")
 
 
-def validate_servizi(servizi, provider_id):
-    if not servizi:
-        bad_request("Regola servizi: la startup deve avere almeno un servizio attivo")
-    if set(servizi) - SERVIZI:
-        bad_request("Regola servizi: servizio non riconosciuto")
-    if "SOLO_CASH_FLOW" in servizi and "AFC_COMPLETO" in servizi:
-        bad_request("Regola servizi: SOLO_CASH_FLOW e AFC_COMPLETO non possono essere attivi insieme")
-    need = [s for s in ("AFC_COMPLETO", "PAGHE") if s in servizi]
-    if need and not provider_id:
-        bad_request(f"Regola servizi: {' e '.join(need)} richiede un provider assegnato")
+async def prepare_services(sid, entries, provider_id, stato):
+    existing = {r["id"]: r async for r in db.startup_services.find(alive({"startup_id": sid}), {"_id": 0})} if sid else {}
+    sent = {e["id"] for e in entries if e.get("id")}
+    if set(existing) - sent:
+        bad_request("Un servizio già registrato non si può rimuovere: imposta la data di cessazione")
+    if sent - set(existing):
+        bad_request("Servizio della startup non trovato")
+    new_ids = [e["service_id"] for e in entries if not e.get("id")]
+    active = {s["id"] async for s in db.services.find(alive({"id": {"$in": new_ids}, "attivo": True}), {"_id": 0})}
+    if set(new_ids) - active:
+        bad_request("Si possono assegnare solo servizi attivi del catalogo")
+    merged = [{
+        "id": e.get("id"),
+        "service_id": existing[e["id"]]["service_id"] if e.get("id") else e["service_id"],
+        "data_attivazione": (e.get("data_attivazione") or "").strip(),
+        "data_cessazione": (e.get("data_cessazione") or "").strip() or None,
+    } for e in entries]
+    await validate_service_records(merged, provider_id, stato)
+    return merged, existing
+
+
+async def persist_services(actor_id, sid, merged, existing):
+    names = {s["id"]: s["nome"] async for s in db.services.find({"id": {"$in": [r["service_id"] for r in merged]}}, {"_id": 0})}
+    for r in merged:
+        name = names.get(r["service_id"])
+        if r["id"]:
+            old = existing[r["id"]]
+            ch = {k: {"from": old.get(k), "to": r[k]} for k in ("data_attivazione", "data_cessazione") if old.get(k) != r[k]}
+            if ch:
+                await db.startup_services.update_one({"id": r["id"]}, {"$set": {"data_attivazione": r["data_attivazione"], "data_cessazione": r["data_cessazione"], "updated_at": now_iso()}})
+                await log_event(actor_id, "STARTUP_SERVICE", r["id"], "STARTUP_SERVICE_UPDATED", {"servizio": name, "changes": ch}, "NURSERY_ONLY", sid)
+        else:
+            rec = {**base_fields(actor_id), "startup_id": sid, "service_id": r["service_id"],
+                   "data_attivazione": r["data_attivazione"], "data_cessazione": r["data_cessazione"]}
+            await db.startup_services.insert_one(dict(rec))
+            await log_event(actor_id, "STARTUP_SERVICE", rec["id"], "STARTUP_SERVICE_ADDED",
+                            {"servizio": name, "data_attivazione": r["data_attivazione"], "data_cessazione": r["data_cessazione"]}, "NURSERY_ONLY", sid)
 
 
 def clean(d):
@@ -84,11 +106,10 @@ def clean(d):
     for k, v in d.items():
         if isinstance(v, str):
             v = v.strip()
-            if v == "" and k in ("telefono", "data_iscrizione_sezione_speciale", "provider_organization_id", "link_impresa_digitale"):
+            if v == "" and k in ("telefono", "data_iscrizione_sezione_speciale", "provider_organization_id", "link_portale_provider"):
                 v = None
         out[k] = v
     out["codice_breve"] = (out.get("codice_breve") or "").upper()
-    out["servizi_attivi"] = list(dict.fromkeys(out.get("servizi_attivi") or []))
     return out
 
 
@@ -122,7 +143,6 @@ async def validate_startup(raw, current_id=None):
         bad_request("Regime IVA non valido")
     if d["stato_cliente"] not in STATI_CLIENTE:
         bad_request("Stato cliente non valido")
-    validate_servizi(d["servizi_attivi"], d["provider_organization_id"])
     if d["provider_organization_id"] and not await db.organizations.find_one(
             alive({"id": d["provider_organization_id"], "type": "PROVIDER"})):
         bad_request("Il provider selezionato non esiste")
@@ -131,8 +151,8 @@ async def validate_startup(raw, current_id=None):
     if not await db.users.find_one(alive({"id": d["referente_nursery_user_id"], "role": {"$in": list(NURSERY_ROLES)},
                                           "status": {"$ne": "DISATTIVATO"}})):
         bad_request("Il referente Nursery deve essere un utente Nursery non disattivato")
-    if d["link_impresa_digitale"] and not re.match(r"^https?://\S+$", d["link_impresa_digitale"]):
-        bad_request("Il link Impresa Digitale deve essere un URL che inizia con http:// o https://")
+    if d["link_portale_provider"] and not re.match(r"^https?://\S+$", d["link_portale_provider"]):
+        bad_request("Il link al portale del provider deve essere un URL che inizia con http:// o https://")
     return d
 
 
@@ -163,16 +183,41 @@ async def log_changes(actor_id, sid, changes):
         await log_event(actor_id, "STARTUP", sid, "STARTUP_STATUS_CHANGED", {"changes": groups["status"]}, "ALL", sid)
 
 
-async def enrich(docs):
-    async def names(coll, ids, fn):
-        return {x["id"]: fn(x) async for x in db[coll].find({"id": {"$in": list(ids)}}, {"_id": 0, "password_hash": 0})}
-    provs = await names("organizations", {d["provider_organization_id"] for d in docs if d.get("provider_organization_id")}, lambda x: x["name"])
-    profs = await names("service_profiles", {d["service_profile_id"] for d in docs}, lambda x: x["nome"])
-    refs = await names("users", {d["referente_nursery_user_id"] for d in docs}, user_label)
+async def enrich(docs, user):
+    nursery = is_nursery(user)
+    full_provider = nursery or is_provider(user)
+
+    async def by_id(coll, ids):
+        return {x["id"]: x async for x in db[coll].find({"id": {"$in": list(ids)}}, {"_id": 0, "password_hash": 0})}
+    provs = await by_id("organizations", {d["provider_organization_id"] for d in docs if d.get("provider_organization_id")})
+    profs = await by_id("service_profiles", {d["service_profile_id"] for d in docs})
+    refs = await by_id("users", {d["referente_nursery_user_id"] for d in docs})
+    recs = await db.startup_services.find(alive({"startup_id": {"$in": [d["id"] for d in docs]}}), {"_id": 0}).sort("data_attivazione", 1).to_list(10000)
+    svcs = await by_id("services", {r["service_id"] for r in recs})
+    t = today_iso()
     for d in docs:
-        d["provider_name"] = provs.get(d.get("provider_organization_id"))
-        d["service_profile_name"] = profs.get(d["service_profile_id"])
-        d["referente_name"] = refs.get(d["referente_nursery_user_id"])
+        servizi = []
+        for r in (x for x in recs if x["startup_id"] == d["id"]):
+            st = record_status(r, t)
+            s = svcs.get(r["service_id"], {})
+            if not nursery and st == "CESSATO":
+                continue
+            item = {"service_id": r["service_id"], "codice": s.get("codice"), "nome": s.get("nome"), "stato": st,
+                    "data_attivazione": r["data_attivazione"], "ordine": s.get("ordine", 0)}
+            if nursery:
+                item.update(id=r["id"], data_cessazione=r["data_cessazione"], categoria=s.get("categoria"), service_attivo=s.get("attivo"))
+            servizi.append(item)
+        d["servizi"] = servizi
+        p = provs.get(d.get("provider_organization_id"))
+        d["provider_name"] = p["name"] if p else None
+        d["provider"] = {k: p.get(k) for k in (PROVIDER_FULL if full_provider else ("id", "name", "nome_portale"))} if p else None
+        r = refs.get(d["referente_nursery_user_id"])
+        d["referente_name"] = user_label(r)
+        if nursery:
+            d["service_profile_name"] = (profs.get(d["service_profile_id"]) or {}).get("nome")
+        else:
+            d.pop("service_profile_id", None)
+            d["referente"] = {k: r.get(k) for k in ("nome", "cognome", "email", "telefono")} if r else None
     return docs
 
 
@@ -191,17 +236,21 @@ async def list_startups(q: Optional[str] = None, stato_cliente: Optional[str] = 
     if provider_organization_id and is_nursery(user):
         query["provider_organization_id"] = None if provider_organization_id == "NONE" else provider_organization_id
     if servizio:
-        query["servizi_attivi"] = servizio
+        t = today_iso()
+        query["id"] = {"$in": await db.startup_services.distinct("startup_id", alive({
+            "service_id": servizio, "data_attivazione": {"$lte": t},
+            "$or": [{"data_cessazione": None}, {"data_cessazione": {"$gte": t}}]}))}
     if referente_nursery_user_id:
         query["referente_nursery_user_id"] = referente_nursery_user_id
     docs = await db.startups.find(query, {"_id": 0}).sort("denominazione", 1).to_list(1000)
-    return await enrich(docs)
+    return await enrich(docs, user)
 
 
 @router.post("")
 async def create_startup(body: StartupIn, user=Depends(get_current_user)):
     require_nursery(user)
-    d = await validate_startup(body.model_dump())
+    d = await validate_startup(body.model_dump(exclude={"servizi"}))
+    merged, _ = await prepare_services(None, [s.model_dump() for s in body.servizi], d["provider_organization_id"], d["stato_cliente"])
     org = {**base_fields(user["id"]), "type": "STARTUP", "name": d["denominazione"]}
     await db.organizations.insert_one(dict(org))
     doc = {**base_fields(user["id"]), "organization_id": org["id"], **d}
@@ -209,12 +258,13 @@ async def create_startup(body: StartupIn, user=Depends(get_current_user)):
     await log_event(user["id"], "STARTUP", doc["id"], "STARTUP_CREATED",
                     {"denominazione": d["denominazione"], "codice_breve": d["codice_breve"], "stato_cliente": d["stato_cliente"]},
                     "ALL", doc["id"])
-    return (await enrich([doc]))[0]
+    await persist_services(user["id"], doc["id"], merged, {})
+    return (await enrich([doc], user))[0]
 
 
 @router.get("/{sid}")
 async def get_startup(sid: str, user=Depends(get_current_user)):
-    return (await enrich([await get_visible_startup(user, sid)]))[0]
+    return (await enrich([await get_visible_startup(user, sid)], user))[0]
 
 
 @router.put("/{sid}")
@@ -223,7 +273,9 @@ async def update_startup(sid: str, body: StartupIn, user=Depends(get_current_use
     old = await db.startups.find_one(alive({"id": sid}), {"_id": 0})
     if not old:
         not_found("Startup non trovata")
-    d = await validate_startup(body.model_dump(), sid)
+    d = await validate_startup(body.model_dump(exclude={"servizi"}), sid)
+    merged, existing = await prepare_services(sid, [s.model_dump() for s in body.servizi], d["provider_organization_id"], d["stato_cliente"])
+    await persist_services(user["id"], sid, merged, existing)
     changes = {f: (old.get(f), d[f]) for f in FIELDS if old.get(f) != d[f]}
     if changes:
         await db.startups.update_one({"id": sid}, {"$set": {**d, "updated_at": now_iso()}})

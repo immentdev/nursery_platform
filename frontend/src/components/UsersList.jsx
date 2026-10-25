@@ -28,6 +28,7 @@ function UserActions({ u, orgType, onEdit, onRole, onAction }) {
         <DropdownMenuItem onClick={() => onEdit(u)} data-testid="user-action-edit">Modifica dati</DropdownMenuItem>
         {!self && <DropdownMenuItem onClick={() => onRole(u)} data-testid="user-action-role">Cambia ruolo</DropdownMenuItem>}
         {u.status === "INVITATO" && <DropdownMenuItem onClick={() => onAction(u, "regenerate")} data-testid="user-action-regenerate">Rigenera link di invito</DropdownMenuItem>}
+        {u.status === "ATTIVO" && <DropdownMenuItem onClick={() => onAction(u, "reset")} data-testid="user-action-reset">Genera link reimpostazione password</DropdownMenuItem>}
         {!self && u.status !== "DISATTIVATO" && <DropdownMenuSeparator />}
         {!self && u.status === "INVITATO" && <DropdownMenuItem className="text-danger-fg" onClick={() => onAction(u, "cancel")} data-testid="user-action-cancel">Annulla invito</DropdownMenuItem>}
         {!self && u.status === "ATTIVO" && <DropdownMenuItem className="text-danger-fg" onClick={() => onAction(u, "deactivate")} data-testid="user-action-deactivate">Disattiva</DropdownMenuItem>}
@@ -49,10 +50,11 @@ export default function UsersList({ users, orgTypeOf, showOrg, onChanged }) {
   const [invite, setInvite] = useState(null);
 
   const run = async (u, kind) => {
-    const path = { regenerate: "regenerate-invite", cancel: "deactivate", deactivate: "deactivate", reactivate: "reactivate" }[kind];
+    const path = { regenerate: "regenerate-invite", reset: "reset-link", cancel: "deactivate", deactivate: "deactivate", reactivate: "reactivate" }[kind];
     try {
       const { data } = await api.post(`/users/${u.id}/${path}`);
       if (kind === "regenerate") setInvite(data);
+      else if (kind === "reset") setInvite({ ...data, kind: "RESET" });
       else toast.success("Operazione completata");
       onChanged();
     } catch (err) {

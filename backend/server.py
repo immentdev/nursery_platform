@@ -13,10 +13,12 @@ from routes_auth import router as auth_router  # noqa: E402
 from routes_users import router as users_router  # noqa: E402
 from routes_startups import router as startups_router  # noqa: E402
 from routes_admin import router as admin_router  # noqa: E402
+from routes_services import router as services_router  # noqa: E402
+from routes_legal import router as legal_router  # noqa: E402
 from seed import seed  # noqa: E402
 
 app = FastAPI(title="Piattaforma Nursery - Modulo 1")
-for r in (auth_router, users_router, startups_router, admin_router):
+for r in (auth_router, users_router, startups_router, admin_router, services_router, legal_router):
     app.include_router(r)
 
 app.add_middleware(

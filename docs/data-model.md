@@ -24,7 +24,14 @@ Soggetti della piattaforma. Esiste una sola organizzazione `NURSERY`. Ogni start
 | Campo | Tipo | Vincoli |
 |---|---|---|
 | type | enum `NURSERY` \| `PROVIDER` \| `STARTUP` | obbligatorio; una sola NURSERY (indice univoco parziale) |
-| name | testo | obbligatorio; per le STARTUP è sincronizzato con `startups.denominazione` |
+| name | testo | obbligatorio; per le STARTUP è sincronizzato con `startups.denominazione`; per i PROVIDER è la ragione sociale |
+| partita_iva | testo, nullable | solo PROVIDER; obbligatoria alla creazione di un nuovo provider, 11 cifre |
+| pec | testo, nullable | solo PROVIDER; obbligatoria alla creazione, formato email |
+| nome_portale | testo, nullable | solo PROVIDER (es. "Impresa Digitale"); etichetta del pulsante nella scheda startup |
+| url_portale | URL, nullable | solo PROVIDER, facoltativo |
+| referente_nome, referente_email, referente_telefono | testo, nullable | solo PROVIDER, facoltativi |
+
+Un provider con ragione sociale, partita IVA o PEC vuote è segnalato come "Dati incompleti" (campo calcolato `dati_incompleti`, non salvato). Ida Servizi è stato migrato con questi campi vuoti, tranne nome_portale "Impresa Digitale" e url_portale https://impresadigitale.eu/.
 
 ### users
 | Campo | Tipo | Vincoli |
@@ -58,16 +65,11 @@ Coerenza ruolo/organizzazione: NURSERY → ADMIN_NURSERY, OPERATORE_NURSERY; PRO
 | regime_iva | enum `MENSILE` \| `TRIMESTRALE` | obbligatorio |
 | provider_organization_id | UUID → organizations.id (type PROVIDER) | facoltativo (assente per clienti "solo cash flow") |
 | service_profile_id | UUID → service_profiles.id | obbligatorio |
-| servizi_attivi | array di enum `AFC_COMPLETO` \| `SOLO_CASH_FLOW` \| `FATTURAZIONE_PER_CONTO` \| `PAGHE` | almeno uno |
 | referente_nursery_user_id | UUID → users.id (ruolo Nursery, non disattivato) | obbligatorio |
-| link_impresa_digitale | URL http(s) | facoltativo |
+| link_portale_provider | URL http(s) | facoltativo (rinominato da `link_impresa_digitale`) |
 | stato_cliente | enum `ONBOARDING` \| `ATTIVO` \| `SOSPESO` \| `CESSATO` | default ONBOARDING |
 
-Regole sui servizi (verificate nel backend):
-1. almeno un servizio attivo;
-2. `SOLO_CASH_FLOW` esclude `AFC_COMPLETO`;
-3. `AFC_COMPLETO` e `PAGHE` richiedono `provider_organization_id`;
-4. `FATTURAZIONE_PER_CONTO` è combinabile liberamente.
+I servizi della startup sono record di `startup_services` (vedi sotto); il campo `servizi_attivi` è stato eliminato.
 
 Cancellazione: solo ADMIN_NURSERY e solo in stato ONBOARDING. Le altre startup si chiudono con stato CESSATO.
 
@@ -79,12 +81,86 @@ Cancellazione: solo ADMIN_NURSERY e solo in stato ONBOARDING. Le altre startup s
 
 Cancellazione logica consentita solo se nessuna startup non cessata lo usa.
 
+### services
+Catalogo dei servizi, gestito da ADMIN_NURSERY.
+
+| Campo | Tipo | Vincoli |
+|---|---|---|
+| codice | testo | obbligatorio, regex `^[A-Z][A-Z0-9_]{1,29}$`, univoco su tutti i record, non modificabile |
+| nome | testo | obbligatorio |
+| descrizione | testo | facoltativo |
+| categoria | enum `SERVIZIO_PROVIDER` \| `SERVIZIO_NURSERY` | obbligatorio |
+| richiede_provider | booleano | default false |
+| attivo | booleano | se false non è selezionabile per nuove assegnazioni, ma resta sulle startup che lo hanno |
+| ordine | intero | ordine di visualizzazione |
+
+Cancellazione logica consentita solo se il servizio non ha record in `startup_services` di startup non cessate; altrimenti si può solo disattivare.
+Servizi migrati: AFC_COMPLETO (SERVIZIO_PROVIDER, richiede provider), SOLO_CASH_FLOW (SERVIZIO_NURSERY), FATTURAZIONE_PER_CONTO (SERVIZIO_NURSERY), PAGHE (SERVIZIO_PROVIDER, richiede provider); incompatibilità SOLO_CASH_FLOW ↔ AFC_COMPLETO.
+
+### service_incompatibilities
+Relazione reciproca: una riga per coppia, con `service_a_id < service_b_id`.
+
+| Campo | Tipo | Vincoli |
+|---|---|---|
+| service_a_id | UUID → services.id | obbligatorio |
+| service_b_id | UUID → services.id | obbligatorio, diverso da service_a_id; coppia univoca tra le righe non cancellate |
+
+### startup_services
+Periodi di attivazione dei servizi di una startup.
+
+| Campo | Tipo | Vincoli |
+|---|---|---|
+| startup_id | UUID → startups.id | obbligatorio |
+| service_id | UUID → services.id | obbligatorio; per nuove assegnazioni il servizio deve essere attivo |
+| data_attivazione | data | obbligatoria, inserita da Nursery (proposta: oggi), anche passata o futura |
+| data_cessazione | data, nullable | non può precedere data_attivazione |
+
+Stato calcolato (non salvato): PROGRAMMATO se data_attivazione > oggi; CESSATO se data_cessazione < oggi; altrimenti ATTIVO.
+Regole verificate nel backend a ogni salvataggio della startup, ricavate dalle proprietà dei servizi:
+1. almeno un servizio ATTIVO o PROGRAMMATO (non si applica alle startup CESSATE);
+2. ogni servizio non cessato con `richiede_provider` richiede `provider_organization_id`;
+3. servizi incompatibili non possono avere periodi sovrapposti;
+4. lo stesso servizio non può avere due periodi sovrapposti.
+Un record registrato non si elimina: si imposta la data di cessazione. Migrazione: un record per ogni servizio precedente, con data_attivazione = data di creazione della startup nella piattaforma.
+
+### legal_documents
+| Campo | Tipo | Vincoli |
+|---|---|---|
+| tipo | enum `TERMINI_USO` \| `INFORMATIVA_PRIVACY` | obbligatorio |
+| versione | testo | obbligatorio, univoco per tipo |
+| testo | testo | obbligatorio |
+| data_pubblicazione | timestamp, nullable | NULL = bozza modificabile; valorizzata alla pubblicazione, poi immutabile |
+| attivo | booleano | una sola versione attiva per tipo: la pubblicazione disattiva la precedente |
+
+Precaricate: versione 1.0 di entrambi, con testo marcato "TESTO PROVVISORIO".
+
+### legal_acceptances
+| Campo | Tipo | Vincoli |
+|---|---|---|
+| user_id | UUID → users.id | obbligatorio |
+| legal_document_id | UUID → legal_documents.id | obbligatorio; coppia univoca |
+| tipo, versione | testo | copia del documento accettato |
+| accepted_at | timestamp Europe/Rome | obbligatorio |
+
+Finché un utente non ha accettato tutte le versioni attive, il backend risponde 403 a ogni API tranne `/api/auth/me`, `/api/legal/current`, `/api/legal/accept`.
+
+### alert_handlings
+Gestione delle segnalazioni (eventi con `nursery_alert = true`); l'EventLog resta immutabile.
+
+| Campo | Tipo | Vincoli |
+|---|---|---|
+| event_log_id | UUID → event_logs.id | obbligatorio, univoco |
+| handled_by_user_id | UUID → users.id (utente Nursery) | obbligatorio |
+| handled_at | timestamp | obbligatorio |
+| azione | enum `PRESA_VISIONE` \| `INVITO_ANNULLATO` \| `RUOLO_CAMBIATO` | obbligatorio |
+
 ### invitations
-Entità tecnica per i link di invito (non prevista esplicitamente dalla specifica, separata da `users` per normalizzazione).
+Entità tecnica per i link di invito e di reimpostazione password (separata da `users` per normalizzazione).
 
 | Campo | Tipo | Vincoli |
 |---|---|---|
 | user_id | UUID → users.id | obbligatorio |
+| tipo | enum `INVITO` \| `RESET_PASSWORD` | INVITO: 7 giorni, utente INVITATO; RESET_PASSWORD: 24 ore, utente ATTIVO. Un nuovo link annulla i precedenti dello stesso tipo |
 | token_hash | testo (SHA-256 del token) | obbligatorio; il token in chiaro non è mai salvato |
 | expires_at | timestamp | creazione + 7 giorni |
 | used_at | timestamp, nullable | valorizzato all'accettazione |
@@ -96,10 +172,10 @@ Registro di tutte le azioni. Non viene mai modificato.
 | Campo | Tipo | Vincoli |
 |---|---|---|
 | actor_user_id | UUID → users.id, nullable | NULL = sistema |
-| entity_type | enum `STARTUP` \| `USER` \| `ORGANIZATION` \| `SERVICE_PROFILE` | obbligatorio |
+| entity_type | enum `STARTUP` \| `USER` \| `ORGANIZATION` \| `SERVICE_PROFILE` \| `SERVICE` \| `STARTUP_SERVICE` \| `LEGAL_DOCUMENT` \| `ALERT` | obbligatorio |
 | entity_id | UUID | obbligatorio (riferimento polimorfico) |
 | startup_id | UUID → startups.id, nullable | startup di riferimento, per la cronologia della scheda (campo aggiunto) |
-| action | testo | es. STARTUP_CREATED, STARTUP_UPDATED, STARTUP_STATUS_CHANGED, STARTUP_DELETED, USER_INVITED, USER_UPDATED, ROLE_CHANGED, USER_DEACTIVATED, USER_REACTIVATED, INVITE_CANCELLED, INVITE_REGENERATED, INVITE_ACCEPTED, PASSWORD_CHANGED, ORGANIZATION_CREATED/UPDATED/DELETED, SERVICE_PROFILE_CREATED/UPDATED/DELETED |
+| action | testo | es. STARTUP_CREATED, STARTUP_UPDATED, STARTUP_STATUS_CHANGED, STARTUP_DELETED, USER_INVITED, USER_UPDATED, ROLE_CHANGED, USER_DEACTIVATED, USER_REACTIVATED, INVITE_CANCELLED, INVITE_REGENERATED, INVITE_ACCEPTED, PASSWORD_CHANGED, PASSWORD_RESET_LINK_CREATED, PASSWORD_RESET_COMPLETED, STARTUP_SERVICE_ADDED, STARTUP_SERVICE_UPDATED, SERVICE_CREATED/UPDATED/DEACTIVATED/DELETED, LEGAL_DRAFT_CREATED/UPDATED/DELETED, LEGAL_PUBLISHED, LEGAL_ACCEPTED, ALERT_HANDLED, ORGANIZATION_CREATED/UPDATED/DELETED, SERVICE_PROFILE_CREATED/UPDATED/DELETED |
 | details | JSON | per le modifiche: `{"changes": {"campo": {"from": ..., "to": ...}}}` |
 | visibility | enum `ALL` \| `NURSERY_ONLY` | vedi docs/permissions.md |
 | nursery_alert | booleano | true per inviti e cambi di ruolo verso ADMIN_STARTUP (pagina Segnalazioni) |
@@ -114,6 +190,10 @@ Protezione da tentativi ripetuti: `identifier` (email), `count`, `locked_until`.
 - organizations (STARTUP) 1 — 1 startups
 - organizations (PROVIDER) 1 — N startups (`provider_organization_id`)
 - service_profiles 1 — N startups
+- startups 1 — N startup_services N — 1 services
+- services N — N services (service_incompatibilities)
+- users 1 — N legal_acceptances N — 1 legal_documents
+- event_logs 1 — 0..1 alert_handlings
 - users (Nursery) 1 — N startups (`referente_nursery_user_id`)
 - users 1 — N invitations
 - startups 1 — N event_logs (`startup_id`)
@@ -129,15 +209,25 @@ CREATE TYPE user_role AS ENUM ('ADMIN_NURSERY', 'OPERATORE_NURSERY', 'OPERATIVO_
 CREATE TYPE user_status AS ENUM ('INVITATO', 'ATTIVO', 'DISATTIVATO');
 CREATE TYPE competence_area AS ENUM ('CONTABILITA', 'PAGHE');
 CREATE TYPE regime_iva AS ENUM ('MENSILE', 'TRIMESTRALE');
-CREATE TYPE servizio AS ENUM ('AFC_COMPLETO', 'SOLO_CASH_FLOW', 'FATTURAZIONE_PER_CONTO', 'PAGHE');
+CREATE TYPE service_categoria AS ENUM ('SERVIZIO_PROVIDER', 'SERVIZIO_NURSERY');
+CREATE TYPE legal_tipo AS ENUM ('TERMINI_USO', 'INFORMATIVA_PRIVACY');
+CREATE TYPE alert_azione AS ENUM ('PRESA_VISIONE', 'INVITO_ANNULLATO', 'RUOLO_CAMBIATO');
+CREATE TYPE token_tipo AS ENUM ('INVITO', 'RESET_PASSWORD');
 CREATE TYPE stato_cliente AS ENUM ('ONBOARDING', 'ATTIVO', 'SOSPESO', 'CESSATO');
 CREATE TYPE event_visibility AS ENUM ('ALL', 'NURSERY_ONLY');
-CREATE TYPE entity_type AS ENUM ('STARTUP', 'USER', 'ORGANIZATION', 'SERVICE_PROFILE');
+CREATE TYPE entity_type AS ENUM ('STARTUP', 'USER', 'ORGANIZATION', 'SERVICE_PROFILE', 'SERVICE', 'STARTUP_SERVICE', 'LEGAL_DOCUMENT', 'ALERT');
 
 CREATE TABLE organizations (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   type        organization_type NOT NULL,
   name        text NOT NULL CHECK (length(trim(name)) > 0),
+  partita_iva text NULL CHECK (partita_iva IS NULL OR partita_iva ~ '^[0-9]{11}$'),
+  pec         text NULL,
+  nome_portale text NULL,
+  url_portale text NULL CHECK (url_portale IS NULL OR url_portale ~ '^https?://'),
+  referente_nome text NULL,
+  referente_email text NULL,
+  referente_telefono text NULL,
   created_at  timestamptz NOT NULL DEFAULT now(),
   updated_at  timestamptz NOT NULL DEFAULT now(),
   created_by  uuid NULL,
@@ -197,19 +287,15 @@ CREATE TABLE startups (
   regime_iva                        regime_iva NOT NULL,
   provider_organization_id          uuid NULL REFERENCES organizations(id),
   service_profile_id                uuid NOT NULL REFERENCES service_profiles(id),
-  servizi_attivi                    servizio[] NOT NULL CHECK (cardinality(servizi_attivi) > 0),
   referente_nursery_user_id         uuid NOT NULL REFERENCES users(id),
-  link_impresa_digitale             text NULL CHECK (link_impresa_digitale IS NULL OR link_impresa_digitale ~ '^https?://'),
+  link_portale_provider             text NULL CHECK (link_portale_provider IS NULL OR link_portale_provider ~ '^https?://'),
   stato_cliente                     stato_cliente NOT NULL DEFAULT 'ONBOARDING',
   created_at                        timestamptz NOT NULL DEFAULT now(),
   updated_at                        timestamptz NOT NULL DEFAULT now(),
   created_by                        uuid NULL REFERENCES users(id),
   deleted_at                        timestamptz NULL,
   CHECK ((startup_innovativa AND data_iscrizione_sezione_speciale IS NOT NULL)
-         OR (NOT startup_innovativa AND data_iscrizione_sezione_speciale IS NULL)),
-  CHECK (NOT ('SOLO_CASH_FLOW' = ANY (servizi_attivi) AND 'AFC_COMPLETO' = ANY (servizi_attivi))),
-  CHECK (provider_organization_id IS NOT NULL
-         OR NOT ('AFC_COMPLETO' = ANY (servizi_attivi) OR 'PAGHE' = ANY (servizi_attivi)))
+         OR (NOT startup_innovativa AND data_iscrizione_sezione_speciale IS NULL))
 );
 CREATE UNIQUE INDEX startups_codice_breve_uq ON startups (codice_breve) WHERE deleted_at IS NULL;
 CREATE INDEX startups_provider_idx ON startups (provider_organization_id);
@@ -219,6 +305,7 @@ CREATE INDEX startups_referente_idx ON startups (referente_nursery_user_id);
 CREATE TABLE invitations (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     uuid NOT NULL REFERENCES users(id),
+  tipo        token_tipo NOT NULL DEFAULT 'INVITO',
   token_hash  char(64) NOT NULL UNIQUE,
   expires_at  timestamptz NOT NULL,
   used_at     timestamptz NULL,
@@ -248,6 +335,91 @@ CREATE TABLE event_logs (
 );
 CREATE INDEX event_logs_startup_idx ON event_logs (startup_id, timestamp DESC);
 CREATE INDEX event_logs_alert_idx ON event_logs (timestamp DESC) WHERE nursery_alert;
+
+CREATE TABLE services (
+  id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  codice             varchar(30) NOT NULL UNIQUE CHECK (codice ~ '^[A-Z][A-Z0-9_]{1,29}$'),
+  nome               text NOT NULL,
+  descrizione        text NOT NULL DEFAULT '',
+  categoria          service_categoria NOT NULL,
+  richiede_provider  boolean NOT NULL DEFAULT false,
+  attivo             boolean NOT NULL DEFAULT true,
+  ordine             integer NOT NULL DEFAULT 0,
+  created_at         timestamptz NOT NULL DEFAULT now(),
+  updated_at         timestamptz NOT NULL DEFAULT now(),
+  created_by         uuid NULL REFERENCES users(id),
+  deleted_at         timestamptz NULL
+);
+-- codice immutabile: trigger BEFORE UPDATE che rifiuta NEW.codice <> OLD.codice (in Supabase).
+
+CREATE TABLE service_incompatibilities (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  service_a_id  uuid NOT NULL REFERENCES services(id),
+  service_b_id  uuid NOT NULL REFERENCES services(id),
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now(),
+  created_by    uuid NULL REFERENCES users(id),
+  deleted_at    timestamptz NULL,
+  CHECK (service_a_id < service_b_id)
+);
+CREATE UNIQUE INDEX service_incompat_pair_uq ON service_incompatibilities (service_a_id, service_b_id) WHERE deleted_at IS NULL;
+
+CREATE TABLE startup_services (
+  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  startup_id        uuid NOT NULL REFERENCES startups(id),
+  service_id        uuid NOT NULL REFERENCES services(id),
+  data_attivazione  date NOT NULL,
+  data_cessazione   date NULL,
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  updated_at        timestamptz NOT NULL DEFAULT now(),
+  created_by        uuid NULL REFERENCES users(id),
+  deleted_at        timestamptz NULL,
+  CHECK (data_cessazione IS NULL OR data_cessazione >= data_attivazione)
+);
+CREATE INDEX startup_services_startup_idx ON startup_services (startup_id);
+-- Sovrapposizioni e incompatibilità sono verificate dal backend (in PostgreSQL: daterange + exclusion constraint o trigger).
+
+CREATE TABLE legal_documents (
+  id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tipo                legal_tipo NOT NULL,
+  versione            text NOT NULL,
+  testo               text NOT NULL,
+  data_pubblicazione  timestamptz NULL,
+  attivo              boolean NOT NULL DEFAULT false,
+  created_at          timestamptz NOT NULL DEFAULT now(),
+  updated_at          timestamptz NOT NULL DEFAULT now(),
+  created_by          uuid NULL REFERENCES users(id),
+  deleted_at          timestamptz NULL,
+  CHECK (NOT attivo OR data_pubblicazione IS NOT NULL)
+);
+CREATE UNIQUE INDEX legal_documents_versione_uq ON legal_documents (tipo, versione) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX legal_documents_attivo_uq ON legal_documents (tipo) WHERE attivo AND deleted_at IS NULL;
+
+CREATE TABLE legal_acceptances (
+  id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id            uuid NOT NULL REFERENCES users(id),
+  legal_document_id  uuid NOT NULL REFERENCES legal_documents(id),
+  tipo               legal_tipo NOT NULL,
+  versione           text NOT NULL,
+  accepted_at        timestamptz NOT NULL DEFAULT now(),
+  created_at         timestamptz NOT NULL DEFAULT now(),
+  updated_at         timestamptz NOT NULL DEFAULT now(),
+  created_by         uuid NULL REFERENCES users(id),
+  deleted_at         timestamptz NULL,
+  UNIQUE (user_id, legal_document_id)
+);
+
+CREATE TABLE alert_handlings (
+  id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_log_id        uuid NOT NULL UNIQUE REFERENCES event_logs(id),
+  handled_by_user_id  uuid NOT NULL REFERENCES users(id),
+  handled_at          timestamptz NOT NULL DEFAULT now(),
+  azione              alert_azione NOT NULL,
+  created_at          timestamptz NOT NULL DEFAULT now(),
+  updated_at          timestamptz NOT NULL DEFAULT now(),
+  created_by          uuid NULL REFERENCES users(id),
+  deleted_at          timestamptz NULL
+);
 
 CREATE TABLE login_attempts (
   identifier    text PRIMARY KEY,

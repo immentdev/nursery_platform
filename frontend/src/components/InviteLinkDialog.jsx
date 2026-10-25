@@ -8,7 +8,8 @@ import { formatDateTime } from "@/lib/labels";
 
 export default function InviteLinkDialog({ invite, onClose }) {
   const [copied, setCopied] = useState(false);
-  const link = invite ? `${window.location.origin}/invito/${invite.invite_token}` : "";
+  const reset = invite?.kind === "RESET";
+  const link = invite ? `${window.location.origin}/${reset ? "reimposta" : "invito"}/${invite.invite_token}` : "";
 
   const copy = async () => {
     try {
@@ -26,10 +27,10 @@ export default function InviteLinkDialog({ invite, onClose }) {
     <Dialog open={!!invite} onOpenChange={(o) => { if (!o) { setCopied(false); onClose(); } }}>
       <DialogContent data-testid="invite-link-dialog">
         <DialogHeader>
-          <DialogTitle>Link di invito</DialogTitle>
+          <DialogTitle>{reset ? "Link di reimpostazione password" : "Link di invito"}</DialogTitle>
           <DialogDescription>
             In questo prototipo non inviamo email: copia il link e invialo a {invite?.user?.email}.
-            Scade il {formatDateTime(invite?.expires_at)}. Il link viene mostrato solo ora.
+            Scade il {formatDateTime(invite?.expires_at)}. Il link viene mostrato solo ora{reset ? " e annulla eventuali link precedenti" : ""}.
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-2 sm:flex-row">

@@ -225,3 +225,16 @@ async def regenerate_invite(uid: str, user=Depends(get_current_user)):
     token, expires = await create_invitation(uid, user["id"])
     await log_event(user["id"], "USER", uid, "INVITE_REGENERATED", {"email": target["email"]}, **await event_meta(org))
     return {"user": target, "invite_token": token, "expires_at": expires}
+
+
+@router.post("/{uid}/reset-link")
+async def reset_link(uid: str, user=Depends(get_current_user)):
+    target, org = await load_target(uid)
+    assert_manage(user, org, target["role"])
+    if target["status"] != "ATTIVO":
+        raise HTTPException(status_code=409, detail="Il link di reimpostazione si genera solo per utenti attivi")
+    token, expires = await create_invitation(uid, user["id"], "RESET_PASSWORD")
+    meta = await event_meta(org)
+    meta["visibility"] = "ALL"
+    await log_event(user["id"], "USER", uid, "PASSWORD_RESET_LINK_CREATED", {"email": target["email"]}, **meta)
+    return {"user": target, "invite_token": token, "expires_at": expires}

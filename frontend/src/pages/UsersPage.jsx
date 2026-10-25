@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { isNursery } from "@/lib/perms";
-import { ORG_TYPE_LABELS, ROLE_LABELS, USER_STATUS } from "@/lib/labels";
+import { ORG_TYPE_LABELS, ROLE_LABELS, ROLES_BY_ORG_TYPE, USER_STATUS } from "@/lib/labels";
 import { PageHeader } from "@/components/common";
 import UsersList from "@/components/UsersList";
 import InviteUserDialog from "@/components/InviteUserDialog";
@@ -47,6 +47,7 @@ export default function UsersPage() {
   const set = (k) => (v) => setF({ ...f, [k]: v });
   const fixedOrg = nursery ? null : user.organization;
   const orgTypeOf = (u) => u.organization_type || user.organization.type;
+  const roleOptions = nursery ? Object.entries(ROLE_LABELS) : ROLES_BY_ORG_TYPE[user.organization.type].map((r) => [r, ROLE_LABELS[r]]);
 
   return (
     <div>
@@ -61,7 +62,7 @@ export default function UsersPage() {
           <Input className="bg-surface pl-9" placeholder="Cerca nome o email" value={f.q} onChange={(e) => set("q")(e.target.value)} data-testid="users-search-input" />
         </div>
         {nursery && <Filter value={f.org_type} onChange={set("org_type")} placeholder="Tutte le organizzazioni" options={Object.entries(ORG_TYPE_LABELS)} testId="users-filter-org-type" />}
-        <Filter value={f.role} onChange={set("role")} placeholder="Tutti i ruoli" options={Object.entries(ROLE_LABELS)} testId="users-filter-role" />
+        <Filter value={f.role} onChange={set("role")} placeholder="Tutti i ruoli" options={roleOptions} testId="users-filter-role" />
         <Filter value={f.status} onChange={set("status")} placeholder="Tutti gli stati" options={Object.entries(USER_STATUS)} testId="users-filter-status" />
       </div>
       <UsersList users={users} orgTypeOf={orgTypeOf} showOrg={nursery} onChanged={load} />

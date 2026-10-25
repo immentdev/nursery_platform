@@ -3,7 +3,7 @@ import re
 import uuid
 import hashlib
 import secrets
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import bcrypt
@@ -17,7 +17,8 @@ db = client[os.environ["DB_NAME"]]
 
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_HOURS = 8
-INVITE_DAYS = 7
+TOKEN_HOURS = {"INVITO": 24 * 7, "RESET_PASSWORD": 24}
+LEGAL_PENDING_MSG = "Devi accettare i termini d'uso e l'informativa privacy per continuare"
 
 NURSERY_ROLES = {"ADMIN_NURSERY", "OPERATORE_NURSERY"}
 PROVIDER_ROLES = {"OPERATIVO_PROVIDER", "PROFESSIONISTA_PROVIDER"}
@@ -35,6 +36,17 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 def now_iso() -> str:
     return datetime.now(TZ).isoformat()
+
+
+def today_iso() -> str:
+    return datetime.now(TZ).date().isoformat()
+
+
+def check_date(value, label):
+    try:
+        date.fromisoformat(value)
+    except (TypeError, ValueError):
+        bad_request(f"{label}: data non valida (formato AAAA-MM-GG)")
 
 
 def new_id() -> str:
@@ -86,7 +98,7 @@ def create_access_token(user_id: str) -> str:
     return jwt.encode(payload, os.environ["JWT_SECRET"], algorithm=JWT_ALGORITHM)
 
 
-async def get_current_user(request: Request) -> dict:
+async def get_user_any(request: Request) -> dict:
     header = request.headers.get("Authorization", "")
     if not header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Autenticazione richiesta")
@@ -99,6 +111,21 @@ async def get_current_user(request: Request) -> dict:
     user = await db.users.find_one(alive({"id": payload.get("sub")}), PUBLIC_USER)
     if not user or user["status"] != "ATTIVO":
         raise HTTPException(status_code=401, detail="Utente non attivo")
+    return user
+
+
+async def pending_legal(user) -> list:
+    docs = await db.legal_documents.find(alive({"attivo": True, "data_pubblicazione": {"$ne": None}}), {"_id": 0, "testo": 0}).to_list(10)
+    ids = [d["id"] for d in docs]
+    accepted = {a["legal_document_id"] async for a in db.legal_acceptances.find(
+        {"user_id": user["id"], "legal_document_id": {"$in": ids}}, {"_id": 0})}
+    return [d for d in docs if d["id"] not in accepted]
+
+
+async def get_current_user(request: Request) -> dict:
+    user = await get_user_any(request)
+    if await pending_legal(user):
+        raise HTTPException(status_code=403, detail=LEGAL_PENDING_MSG)
     return user
 
 
@@ -173,17 +200,14 @@ async def log_event(actor_id, entity_type, entity_id, action, details=None, visi
     })
 
 
-async def create_invitation(user_id, actor_id):
-    t = now_iso()
-    await db.invitations.update_many(
-        {"user_id": user_id, "used_at": None, "revoked_at": None},
-        {"$set": {"revoked_at": t, "updated_at": t}},
-    )
+async def create_invitation(user_id, actor_id, tipo="INVITO"):
+    await revoke_invitations(user_id, tipo)
     token = secrets.token_urlsafe(32)
-    expires = (datetime.now(TZ) + timedelta(days=INVITE_DAYS)).isoformat()
+    expires = (datetime.now(TZ) + timedelta(hours=TOKEN_HOURS[tipo])).isoformat()
     await db.invitations.insert_one({
         **base_fields(actor_id),
         "user_id": user_id,
+        "tipo": tipo,
         "token_hash": hash_token(token),
         "expires_at": expires,
         "used_at": None,
@@ -192,9 +216,12 @@ async def create_invitation(user_id, actor_id):
     return token, expires
 
 
-async def revoke_invitations(user_id):
+async def revoke_invitations(user_id, tipo=None):
     t = now_iso()
+    q = {"user_id": user_id, "used_at": None, "revoked_at": None}
+    if tipo:
+        q["tipo"] = {"$in": [tipo, None]} if tipo == "INVITO" else tipo
     await db.invitations.update_many(
-        {"user_id": user_id, "used_at": None, "revoked_at": None},
+        q,
         {"$set": {"revoked_at": t, "updated_at": t}},
     )
