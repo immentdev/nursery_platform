@@ -1,0 +1,68 @@
+/* Design token: unica fonte di colori, font e spaziature. Il brand definitivo sostituirà solo questi valori. */
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap");
+
+:root {
+    /* Colori (triple HSL) */
+    --color-canvas: 210 40% 98%;
+    --color-surface: 0 0% 100%;
+    --color-subtle: 210 40% 96%;
+    --color-hover: 214 32% 91%;
+    --color-ink: 222 47% 11%;
+    --color-ink-soft: 215 19% 35%;
+    --color-ink-muted: 215 16% 47%;
+    --color-line: 214 32% 91%;
+    --color-line-strong: 213 27% 84%;
+    --color-brand: 207 79% 28%;
+    --color-brand-hover: 207 72% 20%;
+    --color-brand-soft: 207 60% 95%;
+    --color-brand-fg: 0 0% 100%;
+    --color-ok-bg: 152 76% 96%;
+    --color-ok-fg: 161 94% 24%;
+    --color-warn-bg: 48 100% 96%;
+    --color-warn-fg: 26 90% 37%;
+    --color-danger-bg: 0 86% 97%;
+    --color-danger-fg: 0 74% 42%;
+    --color-neutral-bg: 210 40% 96%;
+    --color-neutral-fg: 215 19% 35%;
+
+    /* Font */
+    --font-heading: "Outfit", system-ui, sans-serif;
+    --font-body: "IBM Plex Sans", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+    --text-xs: 0.75rem;
+    --text-sm: 0.875rem;
+    --text-base: 1rem;
+    --text-lg: 1.125rem;
+    --text-xl: 1.25rem;
+    --text-2xl: 1.5rem;
+    --text-3xl: 1.875rem;
+    --text-4xl: 2.25rem;
+
+    /* Spaziature e forme */
+    --space-unit: 0.25rem;
+    --radius: 0.375rem;
+    --sidebar-width: 15rem;
+    --content-max: 80rem;
+    --shadow-card: 0 1px 2px 0 hsl(var(--color-ink) / 0.04);
+
+    /* Variabili shadcn mappate sui token */
+    --background: var(--color-canvas);
+    --foreground: var(--color-ink);
+    --card: var(--color-surface);
+    --card-foreground: var(--color-ink);
+    --popover: var(--color-surface);
+    --popover-foreground: var(--color-ink);
+    --primary: var(--color-brand);
+    --primary-foreground: var(--color-brand-fg);
+    --secondary: var(--color-subtle);
+    --secondary-foreground: var(--color-ink);
+    --muted: var(--color-subtle);
+    --muted-foreground: var(--color-ink-muted);
+    --accent: var(--color-subtle);
+    --accent-foreground: var(--color-ink);
+    --destructive: var(--color-danger-fg);
+    --destructive-foreground: var(--color-brand-fg);
+    --border: var(--color-line);
+    --input: var(--color-line-strong);
+    --ring: var(--color-brand);
+}

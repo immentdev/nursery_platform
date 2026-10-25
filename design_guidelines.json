@@ -1,0 +1,171 @@
+{
+  "project_identity": {
+    "name": "Piattaforma Nursery — Modulo 1 Fondamenta",
+    "language": "Italian (it-IT)",
+    "app_type": "saas_app / dashboard",
+    "target_users": [
+      "Amministrazione Nursery (Imment S.r.l.)",
+      "Provider esterni (Ida Servizi 'Factory')",
+      "Startup SRL in incubazione"
+    ],
+    "archetype": "Swiss & Institutional Minimalism (Pulito, istituzionale, focalizzato sui dati)",
+    "design_tokens_strategy": "Tutti i colori, font e spaziature devono essere definiti tramite CSS custom properties / design tokens in src/index.css e riferiti in src/theme/tokens.js. Nessun colore hex o valore spacing hardcoded nei componenti."
+  },
+  "design_tokens": {
+    "colors": {
+      "light": {
+        "--bg-app": "#F8FAFC",
+        "--bg-surface": "#FFFFFF",
+        "--bg-subtle": "#F1F5F9",
+        "--bg-hover": "#E2E8F0",
+        "--text-primary": "#0F172A",
+        "--text-secondary": "#475569",
+        "--text-muted": "#64748B",
+        "--border-default": "#E2E8F0",
+        "--border-strong": "#CBD5E1",
+        "--accent-primary": "#0F4C81",
+        "--accent-hover": "#0A365C",
+        "--accent-light": "#EBF3FA",
+        "--accent-foreground": "#FFFFFF",
+        "--status-active-bg": "#ECFDF5",
+        "--status-active-fg": "#047857",
+        "--status-pending-bg": "#FFFBEB",
+        "--status-pending-fg": "#B45309",
+        "--status-inactive-bg": "#FEF2F2",
+        "--status-inactive-fg": "#B91C1C",
+        "--ring-focus": "#0F4C81"
+      },
+      "dark": {
+        "--bg-app": "#090D16",
+        "--bg-surface": "#111827",
+        "--bg-subtle": "#1F2937",
+        "--bg-hover": "#374151",
+        "--text-primary": "#F9FAFB",
+        "--text-secondary": "#9CA3AF",
+        "--text-muted": "#6B7280",
+        "--border-default": "#1F2937",
+        "--border-strong": "#374151",
+        "--accent-primary": "#2563EB",
+        "--accent-hover": "#1D4ED8",
+        "--accent-light": "#1E293B",
+        "--accent-foreground": "#FFFFFF",
+        "--status-active-bg": "#064E3B",
+        "--status-active-fg": "#A7F3D0",
+        "--status-pending-bg": "#78350F",
+        "--status-pending-fg": "#FDE68A",
+        "--status-inactive-bg": "#7F1D1D",
+        "--status-inactive-fg": "#FECACA",
+        "--ring-focus": "#3B82F6"
+      }
+    },
+    "typography": {
+      "font_family_heading": "Outfit, system-ui, -apple-system, sans-serif",
+      "font_family_body": "Inter, system-ui, -apple-system, sans-serif",
+      "font_family_mono": "JetBrains Mono, monospace",
+      "h1": "text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900 dark:text-slate-50",
+      "h2": "text-xl sm:text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50",
+      "h3": "text-lg font-medium text-slate-900 dark:text-slate-100",
+      "body": "text-sm text-slate-700 dark:text-slate-300 leading-relaxed",
+      "caption": "text-xs text-slate-500 dark:text-slate-400 font-medium"
+    },
+    "spacing": {
+      "card_padding": "p-5 sm:p-6",
+      "section_gap": "space-y-6",
+      "grid_gap": "gap-4 sm:gap-6",
+      "container_max_width": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
+    },
+    "radius": {
+      "card": "rounded-lg",
+      "button": "rounded-md",
+      "badge": "rounded-full"
+    }
+  },
+  "modules_and_views": [
+    {
+      "id": "login_invitation",
+      "title": "Login & Impostazione Password da Invito",
+      "components": ["Form di Login", "Schermata di impostazione password da link di invito", "Indicatori di forza password (8+ caratteri, maiuscole, numeri, simboli)"]
+    },
+    {
+      "id": "startup_directory",
+      "title": "Elenco Startup",
+      "components": [
+        "Filtri di ricerca in tempo reale (Stato cliente: Attivo/Inattivo/In Onboarding, Provider, Servizi attivi, Referente Nursery)",
+        "Tabella responsiva con paginazione e ordinamento",
+        "Pulsante 'Nuova Startup' (Modal/Drawer)",
+        "Esportazione lista in CSV/Excel",
+        "Toggle tra vista Tabella e vista Griglia Schede"
+      ]
+    },
+    {
+      "id": "startup_detail",
+      "title": "Scheda Startup",
+      "components": [
+        "Header con Badge di Stato, P.IVA, Codice Fiscale, Referente Nursery assegnato",
+        "Tab 1: Anagrafica (dati societari, SEDE legale, PEC, capitale sociale)",
+        "Tab 2: Servizi Attivi (Contabilità, HR, Payroll, Consulenza Legale, Cash Flow Sync)",
+        "Tab 3: Utenti Collegati (Fondatori, Referenti interni, Consulenti esterni)",
+        "Tab 4: Cronologia EventLog (Registro audit completo con filtri per data e tipologia evento)"
+      ]
+    },
+    {
+      "id": "startup_form",
+      "title": "Creazione e Modifica Startup",
+      "components": ["Form multi-sezione con validazione campi obbligatori (Ragione Sociale, P.IVA, Codice Fiscale, PEC, Provider Assegnato, Referente Nursery)"]
+    },
+    {
+      "id": "user_management",
+      "title": "Gestione Utenti",
+      "components": [
+        "Elenco utenti registrati e invitati con filtri per ruolo",
+        "Modale 'Invita Nuovo Utente' con generazione e copia istantanea del link di invito",
+        "Modifica Ruoli (Admin Nursery, Provider Factory, Startup User)",
+        "Azione di Disattivazione / Riattivazione account"
+      ]
+    },
+    {
+      "id": "provider_management",
+      "title": "Gestione Organizzazioni Provider",
+      "components": ["Anagrafica Provider (es. Ida Servizi 'Factory')", "Elenco startup gestite per ciascun provider", "Gestione referenti e contatti operativi"]
+    },
+    {
+      "id": "service_profiles",
+      "title": "Gestione Profili di Servizio",
+      "components": ["Catalogo dei servizi offerti dalla Nursery", "Assegnazione pacchetti di servizio alle startup", "Configurazione livelli di accesso ed SLA"]
+    },
+    {
+      "id": "personal_area",
+      "title": "Area Personale",
+      "components": ["Profilo Utente", "Cambio Password sicuro", "Preferenze notifiche e recapiti"]
+    },
+    {
+      "id": "startup_home",
+      "title": "Home Startup",
+      "components": [
+        "Dashboard semplificata dedicata ai fondatori delle startup",
+        "Scheda sintetica della propria startup SRL",
+        "Banner e Link diretto a 'Impresa Digitale' (Fascicolo d'impresa)",
+        "Stato dei servizi attivi e riferimenti contatto Nursery"
+      ]
+    },
+    {
+      "id": "nursery_reports",
+      "title": "Segnalazioni per Nursery",
+      "components": ["Modulo di invio segnalazione/richiesta supporto", "Coda gestione pratiche aperte per gli amministratori Nursery"]
+    }
+  ],
+  "accessibility_and_testing": {
+    "data_testid_convention": "Tutti gli elementi interattivi (pulsanti, input, tab, selettori, modali, badge, righe tabella) DEVONO avere l'attributo data-testid in formato kebab-case (es. data-testid=\"startup-search-input\", data-testid=\"invite-user-submit-btn\", data-testid=\"startup-status-filter\").",
+    "contrast": "Garantire un rapporto di contrasto minimo 4.5:1 per tutti i testi principali e 3:1 per elementi grafici interattivi.",
+    "hover_focus_states": "Stati hover, focus e attivi sempre definiti con colore di testo esplicito per evitare invisibilità (es. hover:bg-slate-900 hover:text-white)."
+  },
+  "instructions_to_main_agent": [
+    "Costruire la UI interamente con termini professionali in lingua Italiana.",
+    "Utilizzare esclusivamente variabili CSS e token centralizzati definiti in src/index.css e src/theme/tokens.js.",
+    "Integrare un selettore di ruolo nella navbar per testare rapidamente le 3 prospettive: Amministratore Nursery, Provider Factory (Ida Servizi), e Utente Startup.",
+    "Implementare lo switch del tema Chiaro/Scuro (Light/Dark mode) nell'header.",
+    "Includere notifiche Toast interattive tramite la libreria 'sonner' per ogni azione (es. Invito inviato, Link copiato, Startup salvata, Stato aggiornato).",
+    "Fornire dati simulati ricchi e verosimili per le startup italiane (P.IVA a 11 cifre, PEC, indirizzi italiani, eventi cronologici realistici).",
+    "Aggiungere il link diretto e prominente a 'Impresa Digitale' nella vista Home Startup."
+  ]
+}
