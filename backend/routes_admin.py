@@ -179,4 +179,5 @@ async def alerts(user=Depends(get_current_user)):
         e["target_name"] = user_label(users.get(e["entity_id"]))
         s = startups.get(e.get("startup_id"))
         e["startup_name"] = s["denominazione"] if s else None
+        e["startup_deleted"] = bool(s and s.get("deleted_at"))
     return events

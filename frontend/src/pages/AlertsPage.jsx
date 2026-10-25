@@ -26,7 +26,9 @@ export default function AlertsPage() {
                 </div>
                 <div className="text-xs text-ink-muted">
                   {formatDateTime(e.timestamp)} · da {e.actor_name}
-                  {e.startup_id && <> · <Link to={`/startup/${e.startup_id}`} className="text-brand underline">{e.startup_name}</Link></>}
+                  {e.startup_id && (e.startup_deleted
+                    ? <> · {e.startup_name} (eliminata)</>
+                    : <> · <Link to={`/startup/${e.startup_id}`} className="text-brand underline">{e.startup_name}</Link></>)}
                 </div>
               </div>
             </li>

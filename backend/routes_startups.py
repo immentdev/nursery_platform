@@ -101,7 +101,7 @@ async def validate_startup(raw, current_id=None):
         bad_request("Il codice breve deve contenere da 3 a 6 lettere maiuscole (A-Z)")
     dup = await db.startups.find_one(alive({"codice_breve": d["codice_breve"], "id": {"$ne": current_id}}), {"_id": 0})
     if dup:
-        bad_request(f"Il codice breve {d['codice_breve']} è già usato da {dup['denominazione']}")
+        raise HTTPException(status_code=409, detail=f"Il codice breve {d['codice_breve']} è già usato da {dup['denominazione']}")
     if not re.fullmatch(r"\d{11}", d["codice_fiscale"]):
         bad_request("Il codice fiscale di una SRL deve essere composto da 11 cifre")
     if not re.fullmatch(r"\d{11}", d["partita_iva"]):
@@ -114,8 +114,10 @@ async def validate_startup(raw, current_id=None):
         check_date(d["data_iscrizione_sezione_speciale"], "Data iscrizione sezione speciale")
     else:
         d["data_iscrizione_sezione_speciale"] = None
-    if not re.fullmatch(r"(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])", d["data_chiusura_esercizio"]):
-        bad_request("Data di chiusura esercizio non valida (formato MM-GG)")
+    try:
+        date.fromisoformat(f"2024-{d['data_chiusura_esercizio']}")
+    except ValueError:
+        bad_request("Data di chiusura esercizio non valida (giorno/mese inesistente)")
     if d["regime_iva"] not in REGIMI_IVA:
         bad_request("Regime IVA non valido")
     if d["stato_cliente"] not in STATI_CLIENTE:

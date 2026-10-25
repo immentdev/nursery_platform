@@ -34,7 +34,8 @@ Legenda: ✅ consentito · 👁 sola lettura · ❌ negato
 Regole aggiuntive:
 - Il ruolo assegnato deve essere coerente col tipo di organizzazione (es. un utente Startup non può diventare Provider).
 - Nessun utente può cambiare il proprio ruolo né disattivare se stesso.
-- Un ADMIN_STARTUP non può disattivare né declassare l'ultimo ADMIN_STARTUP **attivo** della propria startup (409). Gli utenti Nursery non hanno questo vincolo.
+- Un ADMIN_STARTUP non può disattivare né declassare l'ultimo ADMIN_STARTUP **attivo** della propria startup. Poiché l'attore è a sua volta un ADMIN_STARTUP attivo e non può agire su se stesso (403), la regola è garantita già dal divieto di auto-operazione; il controllo esplicito (409) resta come salvaguardia. Gli utenti Nursery non hanno questo vincolo.
+- Codice breve duplicato: 409; formato non valido: 422.
 - Rigenerare un invito annulla il link precedente. Il link vale 7 giorni ed è mostrato una sola volta a chi lo genera.
 - Annullare un invito = disattivare un utente in stato INVITATO (gli inviti pendenti vengono revocati).
 - Ogni invito o cambio di ruolo verso ADMIN_STARTUP è marcato `nursery_alert = true` e compare nella pagina **Segnalazioni**, visibile solo agli utenti Nursery.

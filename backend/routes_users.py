@@ -126,6 +126,8 @@ async def list_users(organization_id: Optional[str] = None, org_type: Optional[s
 @router.post("")
 async def invite_user(body: InviteIn, user=Depends(get_current_user)):
     org = await get_org(body.organization_id)
+    if not any(can_manage(user, org, r) for r in ROLES_BY_ORG_TYPE[org["type"]]):
+        forbidden("Non hai i permessi per invitare utenti in questa organizzazione")
     if body.role not in ROLES_BY_ORG_TYPE[org["type"]]:
         bad_request("Il ruolo non è compatibile con il tipo di organizzazione")
     assert_manage(user, org, body.role)

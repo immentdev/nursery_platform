@@ -1,0 +1,44 @@
+{
+  "summary": "First full run. Backend: 34 pytest tests (permission matrix for all 8 seeded accounts/6 roles across startups/users/organizations/service-profiles/lookups/alerts, provider isolation incl. 2nd provider, ADMIN_STARTUP invite scoping, codice_breve validation/uniqueness, servizi rules, delete rules 409 with startup list, event visibility ALL vs NURSERY_ONLY with split events, invite flow/regenerate/used/expired/cancel, self/last-admin rules, alerts, profile & password, bcrypt, brute-force lock) - ALL PASS. Frontend (Playwright): login, startup list/search/detail/tabs/Cronologia, create startup form with servizi-rule toast, invite from startup -> link dialog -> copy -> /invito/{token} set password -> logged in to /mia-startup, reused link error, regenerate from Users page invalidates old link, cancel invite, Segnalazioni page, ADMIN_STARTUP home with Impresa Digitale + Modifica contatti (OPERATIVO_STARTUP has none), provider nav/list/404 page, Area personale profile + password change, provider delete blocked toast, startup delete (ONBOARDING), mobile 390px for main pages (no horizontal overflow) - ALL WORKING.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST/PUT /api/startups", "issue": "Duplicate codice_breve returns 422 while permissions.md says rule conflicts are 409 (message itself is correct: 'Il codice breve ALFA è già usato da ...')."},
+      {"endpoint": "POST /api/users/{id}/role, /deactivate", "issue": "Last-active-ADMIN_STARTUP 409 check (assert_not_last_admin) is effectively unreachable: actor must be an active ADMIN_STARTUP of the same org (so 'others' >= 1) and self-operations are blocked earlier with 403. Behaviour is safe, but the 409 path can never fire; verified self-demote/deactivate -> 403 and demoting another admin while actor stays admin -> 200."},
+      {"endpoint": "POST /api/users", "issue": "ADMIN_STARTUP inviting into Nursery/Provider org with a role not matching org type gets 422 ('ruolo non compatibile') instead of 403 because role compatibility is checked before permission; with a matching role it correctly returns 403."},
+      {"endpoint": "routes_startups validate_startup", "issue": "data_chiusura_esercizio regex accepts impossible dates like 02-31 / 04-31."},
+      {"endpoint": "server.py CORS", "issue": "CORS_ORIGINS='*' with allow_credentials=True (auth is Bearer header/localStorage, no httpOnly cookies). Acceptable for prototype; playbook expects explicit origins + httpOnly cookies."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AlertsPage", "issue": "Alerts for startups that were later soft-deleted still render a link to /startup/{id}, which leads to 'Startup non trovata'. Consider marking as 'eliminata' / no link (backend alerts could add startup_deleted flag).", "selector": "[data-testid='alerts-list'] a", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Startup form", "issues": ["Data di costituzione / Data iscrizione use native <input type='date'> browser picker instead of shadcn Calendar/DatePicker (inconsistent styling)."]},
+      {"screen": "Toasts (top-right)", "issues": ["Sonner toast overlaps header action buttons (e.g. 'Modifica contatti', 'Nuovo provider') while visible; consider bottom-right or offset."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_nursery_api.py", "/app/backend/tests/test_auth_extra.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Optional: return 409 for duplicate codice_breve to match the documented error contract (or update permissions.md)",
+    "Optional: decide whether last-admin rule should also protect against Nursery or remove dead code; document behaviour",
+    "Optional: check permission before role-org compatibility in POST /api/users to always return 403 for foreign orgs",
+    "Optional: validate real calendar day for data_chiusura_esercizio",
+    "Optional: handle deleted startups in Segnalazioni links; use shadcn date picker in startup form"
+  ],
+  "critical_code_review_comments": [
+    "Permission logic is centralised and correct (startup_scope, can_manage, get_visible_startup -> 404).",
+    "log_changes correctly splits sensitive vs ordinary fields into NURSERY_ONLY/ALL events - verified.",
+    "list_profiles/list_orgs do N+1 count_documents per row - fine at this scale.",
+    "Invite email uniqueness check includes soft-deleted users (cannot re-invite an email of a deleted startup) - may be intended."
+  ],
+  "updated_files": ["/app/backend/tests/test_nursery_api.py", "/app/backend/tests/test_auth_extra.py"],
+  "success_rate": {"backend": "100% (34/34)", "frontend": "100% of tested flows"},
+  "test_credentials": "From /app/memory/test_credentials.md - all 8 accounts logged in successfully. Seeded passwords untouched.",
+  "seed_data_creation": "Created TEST startups (TEST??, deleted afterwards via ONBOARDING delete), TEST Provider orgs (deleted), users test_*@example.test / test_ui_*@example.test (all deactivated; some are in ALFA org as DISATTIVATO), event log entries and alerts from these. ALFA telefono changed and reverted to empty.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && REACT_APP_BACKEND_URL=<url> python -m pytest tests/ (pytest.ini forces -n 2 --dist loadscope; use -n 0 for serial). Tests create & clean up their own TEST data. Lockout test uses a random non-seeded email. Note screenshot paths with f-strings break the browser tool - use static names."
+}
