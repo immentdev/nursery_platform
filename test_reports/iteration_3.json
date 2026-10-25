@@ -1,0 +1,35 @@
+{
+  "summary": "Re-tested Module 1 plus all 9 collaudo corrections, via API (new pytest suite, 26 passed and 1 skipped) and UI (Playwright on desktop 1920 and mobile 390). Everything requested works: legal gate, service catalog and StartupService rules, invite org picker, invite from the startup card, provider fields with the 'Dati incompleti' badge and portal button, reset link flow, hiding of the service profile, startup-only role filter, alerts (ack, quick actions, counter, banner) and the legal documents page with drafts and publishing. No functional bugs found. The old regression file test_nursery_api.py has 6 failures. They are not app bugs: the file still sends the removed servizi_attivi field and creates a provider without P.IVA/PEC.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "CORS (all /api)", "issue": "The server echoes back any Origin (e.g. https://evil.com) together with allow-credentials=true. Risk is low because auth uses a Bearer header, not cookies, but an explicit origin list is recommended."},
+      {"endpoint": "GET /api/services, GET /api/organizations", "issue": "Counts are computed with one query per item (startup_count/user_count). Fine at current data size."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Startup form ServicesEditor and other date fields", "issues": ["Uses the browser's native date picker (input type=date, shown as mm/dd/yyyy in an en locale) instead of the shadcn Calendar. Not consistent with the Italian dd/mm format shown elsewhere."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_module1_corrections.py", "/app/test_reports/pytest/pytest_module1.xml"],
+  "action_items": [
+    "Update or retire /app/backend/tests/test_nursery_api.py. It still sends servizi_attivi (should be servizi: [{service_id, data_attivazione}]) and creates a provider without partita_iva/pec, causing 6 failures.",
+    "Optional: restrict CORS to explicit origins.",
+    "Optional: replace native date inputs with the shadcn Calendar/date picker using dd/mm/yyyy."
+  ],
+  "critical_code_review_comments": [
+    "Publishing a legal version blocks every API call for the publishing admin until they re-accept. This matches the spec, but the UI should send the admin straight to the LegalGate after a publish (refresh /auth/me) so they don't see 403 errors.",
+    "routes_startups.REQUIRED still requires service_profile_id, so the service profile is mandatory on startups. This is fine as long as it is intended.",
+    "Running the suites in parallel (pytest.ini: -n 2) while a legal-publish test runs makes other workers get 403 for the moment; the legal publish test should run alone (e.g. with -n 0) or in its own run."
+  ],
+  "updated_files": ["/app/backend/tests/test_module1_corrections.py"],
+  "success_rate": {"backend": "100% (26/26 new tests; 1 skipped because the user had already accepted). Legacy file: 28/34, all 6 failures caused by the outdated test payload", "frontend": "100% of tested flows"},
+  "seed_data_creation": "Only TEST-prefixed data was created: startups, services, a provider, a draft legal doc and users. All TEST startups, services and the draft were deleted. The TEST provider is soft-deleted and TEST users are DISATTIVATO. Their ALERT_HANDLED events remain under Gestite. A temporary legal TERMINI_USO version was published and then removed straight from the DB; TERMINI_USO v1.0 was set back to attivo=True. No new legal version is active: the active docs are still both v1.0. operativo@alfa.test password was reset via reset link and set back to Prova2026!; login verified. The unhandled-alert count is back to 1 (Mario Rossi). All seeded users have now accepted legal v1.0: beta, gamma and the others via the API fixture, gamma via the UI gate.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "ALFA id 07775adc-565a-4d4c-a98e-5a93e5637755, BETA c60d2b60-..., GAMMA 50726161-2c49-40fc-a38f-2b5b4324a51a. Every seeded user has accepted legal v1.0. To re-test the LegalGate, invite a new user or publish a test version and clean it up in the DB as TestZLegalPublish does. Run the suite with: cd /app/backend && pytest tests/test_module1_corrections.py -n 0. The container date is 2026-10-25.",
+  "test_credentials": "/app/memory/test_credentials.md (all valid)"
+}

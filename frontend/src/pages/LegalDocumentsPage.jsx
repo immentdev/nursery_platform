@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { api, errorMessage } from "@/lib/api";
 import { LEGAL_TIPI, formatDateTime } from "@/lib/labels";
 import { Card, ConfirmDialog, PageHeader } from "@/components/common";
+import { useAuth } from "@/context/AuthContext";
 
 const docState = (d) => (!d.data_pubblicazione ? ["Bozza", "bg-warn-bg text-warn-fg"] : d.attivo ? ["In vigore", "bg-ok-bg text-ok-fg"] : ["Archiviata", "bg-neutral-bg text-neutral-fg"]);
 
@@ -33,6 +34,7 @@ export default function LegalDocumentsPage() {
   const [edit, setEdit] = useState(null);
   const [view, setView] = useState(null);
   const [confirm, setConfirm] = useState(null);
+  const { refresh } = useAuth();
   const load = useCallback(() => api.get("/legal/documents").then(({ data }) => setDocs(data)), []);
   useEffect(() => {
     load();
@@ -56,7 +58,8 @@ export default function LegalDocumentsPage() {
       if (confirm.kind === "publish") await api.post(`/legal/documents/${confirm.d.id}/publish`);
       else await api.delete(`/legal/documents/${confirm.d.id}`);
       toast.success(confirm.kind === "publish" ? "Versione pubblicata" : "Bozza eliminata");
-      load();
+      if (confirm.kind === "publish") await refresh();
+      else load();
     } catch (err) {
       toast.error(errorMessage(err));
     }
