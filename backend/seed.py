@@ -64,7 +64,7 @@ async def seed():
             "data_costituzione": costit, "startup_innovativa": innov, "data_iscrizione_sezione_speciale": iscr,
             "data_chiusura_esercizio": "12-31", "regime_iva": iva,
             "provider_organization_id": prov["id"] if prov else None, "service_profile_id": prof["id"],
-            "servizi_attivi": serv, "referente_nursery_user_id": ref["id"], "link_impresa_digitale": "https://impresa.italia.it" if code == "ALFA" else None,
+            "servizi_attivi": serv, "referente_nursery_user_id": ref["id"], "link_impresa_digitale": "https://impresadigitale.eu/" if code == "ALFA" else None,
             "stato_cliente": stato,
         })
         await log_event(None, "STARTUP", s["id"], "STARTUP_CREATED",
